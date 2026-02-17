@@ -70,7 +70,7 @@ echo ""
 
 echo "-- Top-level keys --"
 
-TOP_KEYS=(version project backlog qualityGates codeRules ticketValidation)
+TOP_KEYS=(version project backlog qualityGates codeRules ticketValidation agentRouting reviewPipeline)
 
 for key in "${TOP_KEYS[@]}"; do
   if python3 -c "
@@ -153,6 +153,126 @@ assert sys.argv[2] in d['ticketValidation']
     pass "ticketValidation.${key} present"
   else
     fail "ticketValidation.${key} missing"
+  fi
+done
+
+echo ""
+
+# ── agentRouting schema checks ────────────────────────────────────────
+
+echo "-- agentRouting schema --"
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+assert 'agentRouting' in s['properties']
+" "$SCHEMA" 2>/dev/null; then
+  pass "agentRouting section exists in schema"
+else
+  fail "agentRouting section missing from schema"
+fi
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+assert s['properties']['agentRouting']['properties']['rules']['type'] == 'array'
+" "$SCHEMA" 2>/dev/null; then
+  pass "agentRouting.rules is an array"
+else
+  fail "agentRouting.rules is not an array"
+fi
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+assert s['properties']['agentRouting']['properties']['llmOverride']['type'] == 'boolean'
+" "$SCHEMA" 2>/dev/null; then
+  pass "agentRouting.llmOverride is a boolean"
+else
+  fail "agentRouting.llmOverride is not a boolean"
+fi
+
+echo ""
+
+# ── reviewPipeline schema checks ─────────────────────────────────────
+
+echo "-- reviewPipeline schema --"
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+assert 'reviewPipeline' in s['properties']
+" "$SCHEMA" 2>/dev/null; then
+  pass "reviewPipeline section exists in schema"
+else
+  fail "reviewPipeline section missing from schema"
+fi
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+assert s['properties']['reviewPipeline']['properties']['reviewers']['type'] == 'array'
+" "$SCHEMA" 2>/dev/null; then
+  pass "reviewPipeline.reviewers is an array"
+else
+  fail "reviewPipeline.reviewers is not an array"
+fi
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+ct = s['properties']['reviewPipeline']['properties']['confidenceThreshold']
+assert ct['minimum'] == 0
+assert ct['maximum'] == 100
+" "$SCHEMA" 2>/dev/null; then
+  pass "reviewPipeline.confidenceThreshold has min 0 and max 100"
+else
+  fail "reviewPipeline.confidenceThreshold min/max incorrect"
+fi
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+assert s['properties']['reviewPipeline']['properties']['maxReviewRounds']['type'] == 'number'
+" "$SCHEMA" 2>/dev/null; then
+  pass "reviewPipeline.maxReviewRounds is a number"
+else
+  fail "reviewPipeline.maxReviewRounds is not a number"
+fi
+
+echo ""
+
+# ── agentRouting preset sub-keys ──────────────────────────────────────
+
+echo "-- agentRouting preset sub-keys --"
+
+for key in rules llmOverride; do
+  if python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert sys.argv[2] in d['agentRouting']
+" "$PRESET" "$key" 2>/dev/null; then
+    pass "agentRouting.${key} present"
+  else
+    fail "agentRouting.${key} missing"
+  fi
+done
+
+echo ""
+
+# ── reviewPipeline preset sub-keys ────────────────────────────────────
+
+echo "-- reviewPipeline preset sub-keys --"
+
+for key in reviewers confidenceThreshold maxReviewRounds; do
+  if python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert sys.argv[2] in d['reviewPipeline']
+" "$PRESET" "$key" 2>/dev/null; then
+    pass "reviewPipeline.${key} present"
+  else
+    fail "reviewPipeline.${key} missing"
   fi
 done
 
