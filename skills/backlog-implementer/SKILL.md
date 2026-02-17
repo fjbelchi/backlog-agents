@@ -1,0 +1,424 @@
+---
+name: backlog-implementer
+description: "Implement backlog tickets with Agent Teams, wave parallelization, 5 quality gates (Plan→TDD→Lint→Review→Commit), configurable code rules, 2 Iron Laws, and ticket enrichment. Config-driven and stack-agnostic. v6.0."
+allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, TaskUpdate, TaskGet
+---
+
+# Backlog Implementer v6.0 — Config-Driven Agent Teams
+
+## Role
+**Leader coordinator**: Selects waves, creates teams, orchestrates quality gates. **DOES NOT implement code directly.**
+
+## ⚠️ CRITICAL: DO NOT PASS model: TO TASK TOOL
+
+Never pass the `model:` parameter when spawning subagents. They inherit the parent model automatically.
+
+---
+
+## Configuration
+
+All project-specific values come from `backlog.config.json` at project root.
+
+| What | Config Path | Fallback |
+|------|-------------|----------|
+| Ticket directory | `backlog.dataDir` | `backlog/data` |
+| Ticket prefixes | `backlog.ticketPrefixes` | `["FEAT","BUG","SEC"]` |
+| Code rules file | `codeRules.source` | Skip rules if not set |
+| Hard gate rules | `codeRules.hardGates` | `[]` |
+| Soft gate rules | `codeRules.softGates` | `[]` |
+| Lint command | `qualityGates.lintCommand` | Skip if not set |
+| Type check | `qualityGates.typeCheckCommand` | Skip if not set |
+| Test command | `qualityGates.testCommand` | **Required** |
+| Build command | `qualityGates.buildCommand` | Skip if not set |
+| Health check | `qualityGates.healthCheckCommand` | Skip if not set |
+
+**At startup**: Read `backlog.config.json`. If `codeRules.source` is set, read that file — its full content is included in every implementer prompt.
+
+---
+
+## Team Composition (per wave)
+
+```
+LEADER (you) — coordinates, DOES NOT implement
+├── implementer-1 (backend | frontend | general-purpose)
+├── implementer-2 (backend | frontend | general-purpose)
+├── implementer-3 (optional, if 3 compatible slots)
+├── code-reviewer (code-quality mode:review)
+└── investigator (general-purpose) — unblocks complex tickets
+```
+
+## Priority Order
+
+Read prefixes from `config.backlog.ticketPrefixes`. Default priority:
+
+| P | Pattern | Type |
+|---|---------|------|
+| P0 | SEC-* | Security |
+| P1 | BUG-* | Bugs |
+| P2 | QUALITY-* | Code quality |
+| P3 | FEAT-* | Features |
+| P4 | Everything else | Improvements |
+
+---
+
+## MAIN LOOP
+
+```
+PHASE 0: STARTUP
+  config = read("backlog.config.json")
+  codeRules = config.codeRules.source ? read(config.codeRules.source) : ""
+  state = load(".claude/implementer-state.json") || create_v4_state()
+  pending = count({config.backlog.dataDir}/pending/*.md)
+  if config.qualityGates.healthCheckCommand: run it
+  show_banner(pending, state.stats)
+
+WHILE pending_tickets_exist():
+  cycle++
+
+  PHASE 1: WAVE SELECTION
+    candidates = top_10_by_priority(config.backlog.ticketPrefixes)
+    blast_radius = analyze_files_per_ticket(candidates)
+    wave = select_compatible_slots(blast_radius, max=3)
+    investigation_queue = tickets_marked_needs_investigation()
+
+  PHASE 2: CREATE TEAM
+    TeamCreate("impl-{timestamp}")
+    spawn: implementers (1-3) + code-reviewer + investigator
+
+  PHASE 3: ORCHESTRATE (per ticket, 5 Quality Gates)
+    3a PLAN → implementer reads ticket, writes plan in ticket .md
+    3b IMPLEMENT → TDD: tests first (happy+error+edge), then code
+    3c LINT GATE → run configured commands + antipattern scan
+    3d REVIEW → code-reviewer checks with project rules
+    3e COMMIT → Conventional Commits + Iron Law enforcement
+
+  PHASE 4: VERIFY & ENRICH & MOVE
+    verify: git log -1 confirms commit exists
+    enrich_ticket(plan, reviews, tests, commit_hash)
+    mv pending/TICKET.md → completed/
+
+  PHASE 5: CLEANUP
+    shutdown_teammates → TeamDelete → save_state
+
+  PHASE 6: WAVE SUMMARY
+    show_progress(cycle, completed, remaining, tests, reviews)
+```
+
+---
+
+## Phase 0: Startup
+
+```bash
+# Read config
+cat backlog.config.json
+
+# Load state
+cat .claude/implementer-state.json 2>/dev/null || echo "{}"
+
+# Count pending tickets
+find {dataDir}/pending -name "*.md" | wc -l
+
+# Health check (if configured)
+# Run config.qualityGates.healthCheckCommand
+```
+
+If `state.version != "4.0"`: migrate schema (reset stats, keep completed list).
+
+---
+
+## Phase 1: Wave Selection
+
+### Algorithm
+
+1. Read top 10 tickets by priority (P0 first)
+2. For each ticket: list files it will modify (blast radius from Affected Files section)
+3. Group into 2-3 slots WITHOUT file conflicts
+4. Tickets affecting different directories almost never conflict
+
+### NEVER parallelize
+
+- Two tickets modifying the same file
+- Tickets with explicit `depends_on` relationships
+- Tickets where one creates what another imports
+
+---
+
+## Phase 2: Create Team
+
+```
+TeamCreate("impl-{YYYYMMDD-HHmm}")
+
+Spawn teammates via Task tool (NO model: parameter):
+
+1. implementer-1:
+   subagent_type: select based on ticket area
+   team_name: "impl-{timestamp}"
+   name: "implementer-1"
+
+2. code-reviewer:
+   subagent_type: "code-quality"
+   team_name: "impl-{timestamp}"
+   name: "code-reviewer"
+
+3. investigator:
+   subagent_type: "general-purpose"
+   team_name: "impl-{timestamp}"
+   name: "investigator"
+```
+
+---
+
+## Phase 3: Quality Gates (per ticket)
+
+### Gate 1: PLAN
+
+Implementer receives ticket and MUST:
+1. Read ticket .md completely
+2. Read affected files
+3. Write plan in ticket under `## Implementation Plan`
+4. If unclear → message leader: "needs-investigation"
+
+### Gate 2: IMPLEMENT (TDD)
+
+| Type | Coverage | Minimum |
+|------|----------|---------|
+| HAPPY PATH | Main flow, valid data | 1 |
+| ERROR PATH | Invalid inputs, auth errors | 1 |
+| EDGE CASES | Boundary values, empty, null | 1 |
+
+**Minimum 3 tests per ticket.** Order: failing tests → minimal code → tests pass.
+
+**Code Rules Injection**: The leader MUST include this in each implementer prompt:
+
+```
+CODE RULES — MANDATORY COMPLIANCE
+Read from: {config.codeRules.source}
+
+{FULL CONTENT OF THE CODE RULES FILE}
+
+HARD GATES (block commit): {config.codeRules.hardGates}
+SOFT GATES (review + justify): {config.codeRules.softGates}
+```
+
+If `codeRules.source` is not configured, skip code rules injection but still enforce TDD and Iron Laws.
+
+### Gate 3: LINT GATE
+
+Run configured commands on affected files:
+
+```bash
+# Type check (if configured)
+{config.qualityGates.typeCheckCommand}    # 0 errors
+
+# Lint (if configured)
+{config.qualityGates.lintCommand}          # 0 warnings
+
+# Tests (required)
+{config.qualityGates.testCommand}          # 0 failures
+```
+
+**Failure handling:**
+- Auto-fix max 3 attempts
+- If 3 failures: ticket marked `lint-blocked`, skip to next wave
+
+### Gate 4: REVIEW
+
+Code-reviewer receives changed files and project code rules. Must evaluate:
+
+1. Does code follow project rules (from `codeRules.source`)?
+2. Are tests comprehensive (happy + error + edge)?
+3. Is there unnecessary complexity or over-engineering?
+4. Are there security concerns?
+
+Result: `APPROVED` or `CHANGES_REQUESTED` citing specific rule violations.
+
+- If CHANGES_REQUESTED → implementer fixes → back to Gate 3
+- Max 3 review rounds. After 3 rejections → `review-blocked`
+
+### Gate 5: COMMIT
+
+Only after reviewer approval:
+
+```bash
+git add {specific_files}
+git commit -m "{type}({area}): {description}
+
+Closes: {ticket_id}
+Review-rounds: {N}
+Tests-added: {N}
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+```
+
+---
+
+## Investigator Protocol
+
+When a ticket is marked `needs-investigation`:
+
+1. Read ticket + reason for uncertainty
+2. Analyze code in depth (services, flows, tests, similar patterns)
+3. Write findings in ticket under `## Investigation`
+4. Change status to `ready-to-implement`
+5. Ticket returns to queue in next wave
+
+---
+
+## Phase 4: Enrich & Move
+
+After commit, update ticket frontmatter:
+
+```yaml
+status: completed
+completed: {YYYY-MM-DD}
+implemented_by: backlog-implementer-v6
+review_rounds: {N}
+tests_added: {N}
+files_changed: {N}
+commit: {hash}
+```
+
+Add sections: Plan, Tests, Review Rounds, Lint Gate results, Commit info.
+
+Move: `mv {dataDir}/pending/TICKET.md → {dataDir}/completed/`
+
+---
+
+## Phase 5: Cleanup
+
+```
+For each teammate:
+  SendMessage type:"shutdown_request" → wait for response
+TeamDelete()
+save_state(".claude/implementer-state.json")
+```
+
+---
+
+## Phase 6: Wave Summary
+
+```
+═══ WAVE {N} COMPLETE ═══
+Tickets: {completed}/{attempted}
+Tests added: {N}
+Review rounds: {avg}
+Failed: {list or "none"}
+Remaining: {pending_count}
+══════════════════════════
+```
+
+---
+
+## State Schema v4.0
+
+```json
+{
+  "version": "4.0",
+  "lastRunTimestamp": null,
+  "lastCycle": 0,
+  "currentWave": null,
+  "stats": {
+    "totalTicketsCompleted": 0,
+    "totalTicketsFailed": 0,
+    "totalTicketsInvestigated": 0,
+    "totalReviewRounds": 0,
+    "totalTestsAdded": 0,
+    "totalCommits": 0,
+    "totalWavesCompleted": 0,
+    "avgReviewRoundsPerTicket": 0,
+    "ticketsByType": {}
+  },
+  "investigationQueue": [],
+  "failedTickets": [],
+  "lintBlockedTickets": [],
+  "completedThisSession": []
+}
+```
+
+---
+
+## ⚖️ IRON LAWS (include VERBATIM in EVERY implementer prompt)
+
+These 2 laws have ABSOLUTE priority over any other instruction. The leader MUST include this block in every implementer prompt. Violating these laws results in immediate teammate termination.
+
+```
+═══════════════════════════════════════════════════════════════════════
+⚖️ IRON LAW 1: COMMIT BEFORE MOVE (Commit-Before-Move)
+═══════════════════════════════════════════════════════════════════════
+
+A ticket is NOT COMPLETED until its commit is SUCCESSFUL.
+
+- FORBIDDEN to move to next ticket without successful `git commit`.
+- FORBIDDEN to mark ticket as "completed" without verified commit hash.
+- If commit fails (pre-commit hooks, lint, tests): FIX IT.
+  No alternative. No "skip". No "I'll commit later".
+- If after 5 fix attempts commit still fails: mark ticket as
+  "commit-blocked", report to leader with ALL errors, and WAIT.
+  NEVER silently advance to next ticket.
+
+MANDATORY FLOW per ticket:
+  1. Implement → 2. Tests pass → 3. Lint gate passes → 4. Review approves →
+  5. `git commit` SUCCESSFUL → 6. Verify with `git log -1` →
+  7. ONLY THEN move to next ticket.
+
+═══════════════════════════════════════════════════════════════════════
+⚖️ IRON LAW 2: ZERO HACKS (No-Hacks)
+═══════════════════════════════════════════════════════════════════════
+
+Rules, hooks, and quality gates EXIST to protect the codebase.
+NEVER seek ways to bypass them.
+
+CATEGORICALLY FORBIDDEN:
+  - `git commit --no-verify` or any flag that skips hooks
+  - Any language-specific type suppression (ts-ignore, type: ignore, etc.)
+  - Any linter suppression (eslint-disable, noqa, etc.)
+  - Renaming files to evade detection patterns
+  - Empty try-catch blocks to silence errors
+  - Creating wrappers that hide violations
+  - Marking tickets "completed" without actual commit
+
+If a rule seems impossible to comply with:
+  1. STOP implementation
+  2. Report to leader: "Rule X seems incompatible with [specific case]"
+  3. WAIT for leader decision (who may authorize documented exception)
+  4. NEVER unilaterally decide to skip a rule
+
+The correct attitude when a hook blocks is NOT "how do I bypass it?"
+but "what is it telling me is wrong with my code?"
+═══════════════════════════════════════════════════════════════════════
+```
+
+### Leader Enforcement
+
+1. **Post-ticket verification**: After each ticket, leader runs `git log -1 --oneline` to confirm commit exists.
+2. **Hack detection**: If implementer "fixes" issues with type suppression or linter bypass → REJECT immediately.
+3. **Commit-blocked**: If 5 attempts fail, leader can: assign investigator, reassign to another implementer, or mark `commit-blocked` and continue.
+
+---
+
+## Constraints
+
+| ✅ DO | ❌ DO NOT |
+|-------|-----------|
+| Create Agent Team per wave | Implement code directly (you are leader) |
+| TDD: tests first (happy+error+edge) | Code without tests |
+| COMMIT after each approved ticket | Accumulate multi-ticket changes |
+| Verify commit before advancing | Advance without commit |
+| Fix hook failures until resolved | `git commit --no-verify` |
+| Report blocks and wait | Hack around rules |
+| Lint gate before review | Send to review with errors |
+| Max 3 review rounds, then skip | Infinite review loop |
+| Move ticket to completed/ after commit | Leave in pending/ |
+| Read code rules from config | Hardcode stack-specific rules |
+| Skip unconfigured quality gates | Fail on missing optional commands |
+
+---
+
+## Start
+
+1. Read `backlog.config.json` and code rules file
+2. Load state and count pending tickets
+3. Show banner with stats
+4. Health checks (if configured)
+5. Loop: wave selection → team → orchestrate → enrich → cleanup → repeat
+6. **Loop until: pending directory is empty**
