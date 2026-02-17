@@ -31,5 +31,44 @@
     "requireDependencyCheck": true,
     "minAcceptanceCriteria": 3,
     "requireVerificationCommands": true
+  },
+  "agentRouting": {
+    "rules": [
+      {
+        "pattern": "BUG*",
+        "agent": "investigator",
+        "label": "Route bugs to investigator first"
+      },
+      {
+        "pattern": "SEC*",
+        "agent": "security-reviewer",
+        "label": "Route security tickets to security reviewer"
+      },
+      {
+        "pattern": "FEAT*",
+        "agent": "implementer",
+        "label": "Route features to implementer"
+      }
+    ],
+    "overrides": {},
+    "llmOverride": true
+  },
+  "reviewPipeline": {
+    "reviewers": [
+      {
+        "name": "code-quality",
+        "agent": "reviewer",
+        "focus": "Code quality, readability, and adherence to project conventions",
+        "required": true
+      },
+      {
+        "name": "test-coverage",
+        "agent": "reviewer",
+        "focus": "Test completeness, edge cases, and meaningful assertions",
+        "required": true
+      }
+    ],
+    "confidenceThreshold": 80,
+    "maxReviewRounds": 3
   }
 }

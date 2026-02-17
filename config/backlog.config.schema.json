@@ -168,6 +168,101 @@
           "description": "Whether tickets must include verification commands."
         }
       }
+    },
+    "agentRouting": {
+      "type": "object",
+      "description": "Smart agent routing configuration. Determines which agent handles a ticket based on pattern matching.",
+      "properties": {
+        "rules": {
+          "type": "array",
+          "description": "Ordered list of routing rules. First matching rule wins.",
+          "items": {
+            "type": "object",
+            "required": ["pattern", "agent", "label"],
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "description": "Glob or regex pattern matched against ticket prefix or tags."
+              },
+              "agent": {
+                "type": "string",
+                "description": "Agent identifier to route the ticket to (e.g. 'implementer', 'investigator')."
+              },
+              "label": {
+                "type": "string",
+                "description": "Human-readable label describing this routing rule."
+              }
+            }
+          }
+        },
+        "overrides": {
+          "type": "object",
+          "description": "Per-agent overrides keyed by agent identifier.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "investigator": {
+                "type": "boolean",
+                "description": "Whether to run an investigation phase before implementation."
+              },
+              "reviewers": {
+                "type": "number",
+                "description": "Number of review passes for this agent."
+              }
+            }
+          }
+        },
+        "llmOverride": {
+          "type": "boolean",
+          "description": "Allow the LLM to override routing rules based on ticket content analysis.",
+          "default": true
+        }
+      }
+    },
+    "reviewPipeline": {
+      "type": "object",
+      "description": "Configurable review pipeline. Defines which reviewers run and their thresholds.",
+      "properties": {
+        "reviewers": {
+          "type": "array",
+          "description": "Ordered list of reviewers that evaluate implementation output.",
+          "items": {
+            "type": "object",
+            "required": ["name", "agent", "focus"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Unique name for this reviewer (e.g. 'code-quality', 'security')."
+              },
+              "agent": {
+                "type": "string",
+                "description": "Agent identifier that performs this review."
+              },
+              "focus": {
+                "type": "string",
+                "description": "Description of what this reviewer evaluates."
+              },
+              "required": {
+                "type": "boolean",
+                "description": "Whether this reviewer must pass for the ticket to be accepted.",
+                "default": true
+              }
+            }
+          }
+        },
+        "confidenceThreshold": {
+          "type": "number",
+          "description": "Minimum confidence score (0-100) required to accept a review.",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 80
+        },
+        "maxReviewRounds": {
+          "type": "number",
+          "description": "Maximum number of review-fix cycles before escalation.",
+          "default": 3
+        }
+      }
     }
   }
 }
