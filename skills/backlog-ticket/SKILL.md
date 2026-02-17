@@ -1,6 +1,6 @@
 ---
 name: backlog-ticket
-description: "Generate high-quality backlog tickets with 6-check validation. Detects gaps, verifies dependencies, validates contracts, analyzes impact, and ensures consistency. Ask clarifying questions when ambiguous."
+description: "Generate high-quality backlog tickets with 6-check validation and cost estimation. Detects gaps, verifies dependencies, validates contracts, analyzes impact, ensures consistency, and estimates implementation cost per model. Learns from actual costs via cost-history feedback loop."
 allowed-tools: Read, Write, Bash, Glob, Grep, Edit, AskUserQuestion, Task
 ---
 
@@ -165,6 +165,106 @@ Add type-specific frontmatter fields:
 
 **History**: Single row with today's date, "Created", and "claude-code".
 
+### 2.4 Cost Estimation
+
+Estimate the implementation cost in tokens and USD for each Claude model.
+
+#### Step 1: Load Historical Data
+
+Read `.claude/cost-history.json` if it exists. This file is written by `backlog-implementer` after each completed ticket with actual token usage.
+
+```json
+// .claude/cost-history.json structure
+{
+  "version": "1.0",
+  "entries": [
+    {
+      "ticket_id": "FEAT-001",
+      "type": "FEAT",
+      "files_modified": 3,
+      "files_created": 1,
+      "tests_added": 5,
+      "input_tokens": 52340,
+      "output_tokens": 14230,
+      "total_tokens": 66570,
+      "cost_usd": 1.85,
+      "model": "claude-opus-4",
+      "review_rounds": 1,
+      "date": "2026-02-17"
+    }
+  ],
+  "averages": {
+    "input_tokens_per_file_modified": 8000,
+    "input_tokens_per_file_created": 3000,
+    "output_tokens_per_file_modified": 2500,
+    "output_tokens_per_file_created": 4000,
+    "output_tokens_per_test": 1200,
+    "overhead_multiplier": 2.3
+  }
+}
+```
+
+#### Step 2: Estimate Tokens
+
+If **cost history exists** (has entries with matching ticket type), use historical averages:
+
+```
+input_tokens = (files_to_modify * avg.input_tokens_per_file_modified)
+             + (files_to_create * avg.input_tokens_per_file_created)
+
+output_tokens = (files_to_modify * avg.output_tokens_per_file_modified)
+              + (files_to_create * avg.output_tokens_per_file_created)
+              + (test_count * avg.output_tokens_per_test)
+
+total_tokens = (input_tokens + output_tokens) * avg.overhead_multiplier
+```
+
+If **no cost history** (first-time use), use default heuristics:
+
+```
+input_tokens = (files_to_modify * 8000) + (files_to_create * 3000)
+output_tokens = (files_to_modify * 2500) + (files_to_create * 4000) + (test_count * 1200)
+overhead_multiplier = 2.5  (accounts for planning, review, lint retries)
+
+total_tokens = (input_tokens + output_tokens) * overhead_multiplier
+```
+
+Split total: ~60% input, ~40% output (typical for implementation work).
+
+#### Step 3: Calculate Cost Per Model
+
+Use current pricing (per 1M tokens):
+
+| Model | Input $/1M | Output $/1M |
+|-------|-----------|------------|
+| Claude Opus 4 | $15.00 | $75.00 |
+| Claude Sonnet 4 | $3.00 | $15.00 |
+| Claude Haiku 3.5 | $0.80 | $4.00 |
+
+```
+cost = (input_tokens / 1_000_000 * input_price) + (output_tokens / 1_000_000 * output_price)
+```
+
+#### Step 4: Write Cost Estimate Section in Ticket
+
+Add this section to the generated ticket after Dependencies:
+
+```markdown
+## Cost Estimate
+
+| Model | Input Tokens | Output Tokens | Est. Cost |
+|-------|-------------|---------------|-----------|
+| Opus 4 | ~{input} | ~{output} | ${cost} |
+| Sonnet 4 | ~{input} | ~{output} | ${cost} |
+| Haiku 3.5 | ~{input} | ~{output} | ${cost} |
+
+**Basis**: {N} files to modify, {M} files to create, {K} tests defined
+**Estimation source**: {historical (N samples) | default heuristics}
+**Confidence**: {high (>10 samples) | medium (3-10) | low (<3 or defaults)}
+```
+
+Round token counts to nearest 1000. Round costs to 2 decimal places.
+
 ---
 
 ## Phase 3: Validation (6 Checks)
@@ -318,6 +418,7 @@ Ticket created: {PREFIX}-{NNN}
   Dependencies: {count} tickets
   Tests:        {unit_count} unit, {integration_count} integration
   AC count:     {count}
+  Est. cost:    ~${opus_cost} (Opus) | ~${sonnet_cost} (Sonnet) | ~${haiku_cost} (Haiku)
 ```
 
 ### Warnings Found

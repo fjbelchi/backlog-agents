@@ -1,10 +1,10 @@
 ---
 name: backlog-implementer
-description: "Implement backlog tickets with Agent Teams, wave parallelization, 5 quality gates (Plan→TDD→Lint→Review→Commit), configurable code rules, 2 Iron Laws, and ticket enrichment. Config-driven and stack-agnostic. v6.0."
+description: "Implement backlog tickets with Agent Teams, wave parallelization, 5 quality gates (Plan→TDD→Lint→Review→Commit), configurable code rules, 2 Iron Laws, ticket enrichment, and cost tracking. Tracks actual tokens/cost per ticket and feeds back to cost-history for estimation improvement. Config-driven and stack-agnostic. v6.1."
 allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, TaskUpdate, TaskGet
 ---
 
-# Backlog Implementer v6.0 — Config-Driven Agent Teams
+# Backlog Implementer v6.1 — Config-Driven Agent Teams + Cost Tracking
 
 ## Role
 **Leader coordinator**: Selects waves, creates teams, orchestrates quality gates. **DOES NOT implement code directly.**
@@ -122,7 +122,7 @@ find {dataDir}/pending -name "*.md" | wc -l
 # Run config.qualityGates.healthCheckCommand
 ```
 
-If `state.version != "4.0"`: migrate schema (reset stats, keep completed list).
+If `state.version != "5.0"`: migrate schema (add `totalTokensUsed` and `totalCostUsd` to stats, keep everything else).
 
 ---
 
@@ -264,9 +264,13 @@ When a ticket is marked `needs-investigation`:
 
 ---
 
-## Phase 4: Enrich & Move
+## Phase 4: Enrich, Track Cost & Move
 
-After commit, update ticket frontmatter:
+After commit, perform three actions: enrich ticket, track costs, move to completed.
+
+### 4.1 Enrich Ticket
+
+Update ticket frontmatter:
 
 ```yaml
 status: completed
@@ -279,6 +283,120 @@ commit: {hash}
 ```
 
 Add sections: Plan, Tests, Review Rounds, Lint Gate results, Commit info.
+
+### 4.2 Track Actual Cost
+
+**Token collection**: When each subagent (implementer, reviewer, investigator) completes, its Task tool response includes `total_tokens` and `tool_uses` in the output metadata. The leader MUST capture these values.
+
+Track per ticket:
+
+```
+ticket_tokens = {
+  plan_tokens:       tokens from Gate 1 (PLAN phase)
+  implement_tokens:  tokens from Gate 2 (IMPLEMENT + TDD)
+  lint_tokens:       tokens from Gate 3 (LINT retries)
+  review_tokens:     tokens from Gate 4 (REVIEW rounds)
+  commit_tokens:     tokens from Gate 5 (COMMIT)
+  total_input:       sum of all input tokens
+  total_output:      sum of all output tokens
+  total:             total_input + total_output
+}
+```
+
+**Cost calculation** using current model pricing (per 1M tokens):
+
+| Model | Input $/1M | Output $/1M |
+|-------|-----------|------------|
+| Claude Opus 4 | $15.00 | $75.00 |
+| Claude Sonnet 4 | $3.00 | $15.00 |
+| Claude Haiku 3.5 | $0.80 | $4.00 |
+
+Detect which model was used (check the session's model or default to Opus 4).
+
+```
+cost_usd = (total_input / 1_000_000 * input_price) + (total_output / 1_000_000 * output_price)
+```
+
+**Add Actual Cost section to completed ticket:**
+
+```markdown
+## Actual Cost
+
+| Metric | Value |
+|--------|-------|
+| Model | {model_name} |
+| Input tokens | {total_input} |
+| Output tokens | {total_output} |
+| Total tokens | {total} |
+| Cost | ${cost_usd} |
+| Review rounds | {N} |
+| Lint retries | {N} |
+
+### Breakdown by Phase
+| Phase | Tokens | % |
+|-------|--------|---|
+| Plan | {plan_tokens} | {%} |
+| Implement | {implement_tokens} | {%} |
+| Lint | {lint_tokens} | {%} |
+| Review | {review_tokens} | {%} |
+| Commit | {commit_tokens} | {%} |
+```
+
+**Compare with estimate**: If the ticket had a `## Cost Estimate` section, calculate accuracy:
+
+```
+estimate_accuracy = 1 - abs(actual_cost - estimated_cost) / estimated_cost
+```
+
+Add to the Actual Cost section:
+```
+| Estimated cost | ${estimated} |
+| Accuracy | {accuracy}% |
+```
+
+### 4.3 Update Cost History
+
+Read `.claude/cost-history.json` (create if missing). Append a new entry and recalculate averages.
+
+```json
+// New entry to append
+{
+  "ticket_id": "{id}",
+  "type": "{prefix}",
+  "files_modified": {N},
+  "files_created": {M},
+  "tests_added": {K},
+  "input_tokens": {total_input},
+  "output_tokens": {total_output},
+  "total_tokens": {total},
+  "cost_usd": {cost},
+  "model": "{model}",
+  "review_rounds": {N},
+  "date": "{YYYY-MM-DD}"
+}
+```
+
+**Recalculate averages** from ALL entries:
+
+```
+averages.input_tokens_per_file_modified = avg(entry.input_tokens / entry.files_modified)
+averages.input_tokens_per_file_created = avg(entry.input_tokens / entry.files_created)
+averages.output_tokens_per_file_modified = avg(entry.output_tokens / entry.files_modified)
+averages.output_tokens_per_file_created = avg(entry.output_tokens / entry.files_created)
+averages.output_tokens_per_test = avg(entry.output_tokens / entry.tests_added)
+averages.overhead_multiplier = avg(entry.total_tokens / (base_estimate))
+```
+
+This data feeds back to `backlog-ticket` for better future estimates.
+
+### 4.4 Update State
+
+```
+state.stats.totalTokensUsed += total_tokens
+state.stats.totalCostUsd += cost_usd
+```
+
+### 4.5 Move Ticket
 
 Move: `mv {dataDir}/pending/TICKET.md → {dataDir}/completed/`
 
@@ -299,21 +417,26 @@ save_state(".claude/implementer-state.json")
 
 ```
 ═══ WAVE {N} COMPLETE ═══
-Tickets: {completed}/{attempted}
-Tests added: {N}
+Tickets:       {completed}/{attempted}
+Tests added:   {N}
 Review rounds: {avg}
-Failed: {list or "none"}
-Remaining: {pending_count}
+Failed:        {list or "none"}
+Remaining:     {pending_count}
+─── Cost ───
+Tokens:        {wave_total_tokens} ({input} in / {output} out)
+Cost:          ${wave_cost_usd}
+Accuracy:      {avg_estimate_accuracy}% vs ticket estimates
+Session total: ${session_total_cost_usd}
 ══════════════════════════
 ```
 
 ---
 
-## State Schema v4.0
+## State Schema v5.0
 
 ```json
 {
-  "version": "4.0",
+  "version": "5.0",
   "lastRunTimestamp": null,
   "lastCycle": 0,
   "currentWave": null,
@@ -326,7 +449,9 @@ Remaining: {pending_count}
     "totalCommits": 0,
     "totalWavesCompleted": 0,
     "avgReviewRoundsPerTicket": 0,
-    "ticketsByType": {}
+    "ticketsByType": {},
+    "totalTokensUsed": 0,
+    "totalCostUsd": 0
   },
   "investigationQueue": [],
   "failedTickets": [],
