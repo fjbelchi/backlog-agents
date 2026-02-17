@@ -1,0 +1,27 @@
+{
+  "name": "backlog-toolkit",
+  "description": "Reusable backlog management toolkit for Claude Code. Stack-agnostic skills for ticket creation with gap detection, refinement, and implementation with Agent Teams. Includes cost estimation and tracking.",
+  "version": "1.0.0",
+  "author": {
+    "name": "fbelchi",
+    "url": "https://github.com/fbelchi"
+  },
+  "repository": "https://github.com/fbelchi/backlog-agents",
+  "license": "MIT",
+  "keywords": [
+    "backlog",
+    "tickets",
+    "project-management",
+    "agent-teams",
+    "tdd",
+    "quality-gates",
+    "cost-estimation"
+  ],
+  "commands": [
+    "./commands/init.md",
+    "./commands/ticket.md",
+    "./commands/refinement.md",
+    "./commands/implementer.md"
+  ],
+  "skills": "./skills/"
+}

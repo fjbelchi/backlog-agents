@@ -1,37 +1,55 @@
-# Backlog Agents -- Reusable Backlog Toolkit for Claude Code
+# Backlog Toolkit -- Reusable Backlog Management Plugin for Claude Code
 
-A set of 4 Claude Code skills for managing project backlogs. Stack-agnostic,
-config-driven. Handles ticket creation, refinement, and implementation with
-Agent Teams.
+A Claude Code plugin with 4 skills for managing project backlogs. Stack-agnostic,
+config-driven. Handles ticket creation with gap detection, refinement, and
+implementation with Agent Teams. Includes cost estimation and tracking.
+
+## Installation
+
+### Via Plugin (recommended)
+
+```bash
+# If this repo is in a marketplace:
+/plugin install backlog-toolkit@marketplace-name
+
+# Or install directly from local path:
+/plugin install --path /path/to/backlog-agents
+
+# Or test locally during development:
+claude --plugin-dir /path/to/backlog-agents
+```
+
+### Via install.sh (manual)
+
+```bash
+./install.sh                    # global: ~/.claude/skills/
+./install.sh --local            # project: .claude/skills/
+```
 
 ## Quick Start
 
 ```bash
-# Install skills
-./install.sh                    # global: ~/.claude/skills/
-./install.sh --local            # project: .claude/skills/
-
 # Initialize backlog in your project
-/backlog-init
+/backlog-toolkit:init
 
-# Create a ticket
-/backlog-ticket "Add user authentication"
+# Create a ticket (with cost estimation)
+/backlog-toolkit:ticket "Add user authentication"
 
 # Refine existing tickets
-/backlog-refinement
+/backlog-toolkit:refinement
 
-# Implement tickets
-/backlog-implementer
+# Implement tickets (with cost tracking)
+/backlog-toolkit:implementer
 ```
 
 ## Skills Overview
 
-| Skill | Purpose | Invocation |
-|-------|---------|------------|
-| backlog-init | Initialize backlog in any project | `/backlog-init` |
-| backlog-ticket | Generate validated tickets with 6-check validation | `/backlog-ticket` |
-| backlog-refinement | Refine and validate existing tickets | `/backlog-refinement` |
-| backlog-implementer | Implement tickets with Agent Teams | `/backlog-implementer` |
+| Skill | Purpose | Command |
+|-------|---------|---------|
+| backlog-init | Initialize backlog in any project | `/backlog-toolkit:init` |
+| backlog-ticket | Generate validated tickets with cost estimation | `/backlog-toolkit:ticket` |
+| backlog-refinement | Refine and validate existing tickets | `/backlog-toolkit:refinement` |
+| backlog-implementer | Implement tickets with cost tracking | `/backlog-toolkit:implementer` |
 
 ### backlog-init
 
@@ -134,16 +152,57 @@ Four ticket types are supported out of the box:
 
 ## Install Options
 
+### Plugin install (recommended)
+
+```bash
+# User scope (available everywhere)
+/plugin install backlog-toolkit --scope user
+
+# Project scope (shared with team via .claude/settings.json)
+/plugin install backlog-toolkit --scope project
+```
+
+### Manual install.sh
+
 ```
 ./install.sh [OPTIONS]
 
 Options:
-  --local       Install to .claude/skills/ in the current project
-  --skills      Install only skill files (skip config and templates)
+  --local       Install to .claude/skills/ in current project
+  --skills      Comma-separated list of skills to install
   --force       Overwrite existing files without prompting
 ```
 
-By default, skills are installed globally to `~/.claude/skills/`.
+## Plugin Structure
+
+```
+backlog-agents/
+├── .claude-plugin/
+│   └── plugin.json           # Plugin manifest
+├── commands/                  # Slash commands (/backlog-toolkit:*)
+│   ├── init.md
+│   ├── ticket.md
+│   ├── refinement.md
+│   └── implementer.md
+├── skills/                    # Agent skills (full specifications)
+│   ├── backlog-init/SKILL.md
+│   ├── backlog-ticket/SKILL.md
+│   ├── backlog-refinement/SKILL.md
+│   └── backlog-implementer/SKILL.md
+├── templates/                 # Ticket templates
+├── config/                    # Config schema and presets
+├── tests/                     # Validation tests
+└── install.sh                 # Manual install script
+```
+
+## Cost Tracking
+
+Tickets created with `/backlog-toolkit:ticket` include a **Cost Estimate** section
+showing estimated tokens and USD cost for Opus, Sonnet, and Haiku models.
+
+When implemented via `/backlog-toolkit:implementer`, actual costs are tracked and
+saved to `.claude/cost-history.json`. This data feeds back to improve future
+ticket estimates, creating a learning loop.
 
 ## License
 
