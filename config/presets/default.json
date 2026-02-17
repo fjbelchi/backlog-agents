@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "project": {
+    "name": "my-project",
+    "stack": "generic"
+  },
+  "backlog": {
+    "dataDir": "backlog/data",
+    "templatesDir": "backlog/templates",
+    "ticketPrefixes": ["FEAT", "BUG", "SEC", "QUALITY", "REFACTOR", "TEST"],
+    "requiredSections": [
+      "context",
+      "description",
+      "acceptanceCriteria",
+      "testStrategy",
+      "affectedFiles",
+      "dependencies"
+    ]
+  },
+  "qualityGates": {
+    "testCommand": "echo 'Configure testCommand in backlog.config.json'"
+  },
+  "codeRules": {
+    "source": ".claude/code-rules.md",
+    "hardGates": [],
+    "softGates": []
+  },
+  "ticketValidation": {
+    "requireTestStrategy": true,
+    "requireAffectedFiles": true,
+    "requireDependencyCheck": true,
+    "minAcceptanceCriteria": 3,
+    "requireVerificationCommands": true
+  }
+}

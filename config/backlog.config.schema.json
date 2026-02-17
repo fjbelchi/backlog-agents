@@ -1,0 +1,173 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://backlog-agents/backlog.config.schema.json",
+  "title": "Backlog Agents Configuration",
+  "description": "Schema for backlog.config.json files used by backlog-agents skills.",
+  "type": "object",
+  "required": ["version", "project", "backlog", "qualityGates", "codeRules", "ticketValidation"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Configuration schema version.",
+      "enum": ["1.0"]
+    },
+    "project": {
+      "type": "object",
+      "description": "Project-level metadata.",
+      "required": ["name", "stack"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable project name.",
+          "minLength": 1
+        },
+        "stack": {
+          "type": "string",
+          "description": "Primary technology stack (e.g. typescript, python, generic).",
+          "minLength": 1
+        },
+        "testRunner": {
+          "type": "string",
+          "description": "Test runner used by the project (e.g. vitest, jest, pytest)."
+        },
+        "linter": {
+          "type": "string",
+          "description": "Linter used by the project (e.g. eslint, ruff)."
+        },
+        "typeChecker": {
+          "type": "string",
+          "description": "Type checker used by the project (e.g. tsc, mypy)."
+        }
+      }
+    },
+    "backlog": {
+      "type": "object",
+      "description": "Backlog data and template configuration.",
+      "required": ["dataDir", "templatesDir", "ticketPrefixes", "requiredSections"],
+      "additionalProperties": false,
+      "properties": {
+        "dataDir": {
+          "type": "string",
+          "description": "Directory where ticket data files are stored.",
+          "minLength": 1
+        },
+        "templatesDir": {
+          "type": "string",
+          "description": "Directory where ticket templates are stored.",
+          "minLength": 1
+        },
+        "ticketPrefixes": {
+          "type": "array",
+          "description": "Allowed ticket-type prefixes.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "requiredSections": {
+          "type": "array",
+          "description": "Sections that every ticket must include.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "qualityGates": {
+      "type": "object",
+      "description": "Commands executed as quality gates during ticket implementation.",
+      "required": ["testCommand"],
+      "additionalProperties": false,
+      "properties": {
+        "lintCommand": {
+          "type": "string",
+          "description": "Command to run the linter."
+        },
+        "typeCheckCommand": {
+          "type": "string",
+          "description": "Command to run the type checker."
+        },
+        "testCommand": {
+          "type": "string",
+          "description": "Command to run the test suite.",
+          "minLength": 1
+        },
+        "buildCommand": {
+          "type": "string",
+          "description": "Command to build the project."
+        },
+        "healthCheckCommand": {
+          "type": "string",
+          "description": "Command to verify project health after changes."
+        }
+      }
+    },
+    "codeRules": {
+      "type": "object",
+      "description": "Code-quality rules enforced during implementation.",
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Path to a Markdown file containing code rules."
+        },
+        "hardGates": {
+          "type": "array",
+          "description": "Rules that must pass; failure blocks ticket completion.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "softGates": {
+          "type": "array",
+          "description": "Rules that are checked but do not block ticket completion.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ticketValidation": {
+      "type": "object",
+      "description": "Validation rules applied when creating or updating tickets.",
+      "required": [
+        "requireTestStrategy",
+        "requireAffectedFiles",
+        "requireDependencyCheck",
+        "minAcceptanceCriteria",
+        "requireVerificationCommands"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "requireTestStrategy": {
+          "type": "boolean",
+          "description": "Whether tickets must include a test strategy section."
+        },
+        "requireAffectedFiles": {
+          "type": "boolean",
+          "description": "Whether tickets must list affected files."
+        },
+        "requireDependencyCheck": {
+          "type": "boolean",
+          "description": "Whether tickets must include a dependency check."
+        },
+        "minAcceptanceCriteria": {
+          "type": "integer",
+          "description": "Minimum number of acceptance criteria required per ticket.",
+          "minimum": 1
+        },
+        "requireVerificationCommands": {
+          "type": "boolean",
+          "description": "Whether tickets must include verification commands."
+        }
+      }
+    }
+  }
+}
