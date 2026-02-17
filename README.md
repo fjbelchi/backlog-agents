@@ -76,6 +76,12 @@ Orchestrates Agent Teams to implement tickets in parallel waves. Each ticket
 passes through 5 quality gates: Plan, TDD (tests first), Lint, Code Review,
 and Commit. Enforces two Iron Laws: Commit-Before-Move and Zero-Hacks.
 
+v7.0 additions:
+- **Smart agent routing** -- selects the optimal agent type per ticket based on affected files
+- **Embedded skill catalog** -- 7 disciplines: TDD, code review, debugging, security, architecture, frontend, performance
+- **Configurable review pipeline** -- 2-4 parallel reviewers with confidence scoring
+- **External plugin detection** -- discovers and loads third-party skill plugins
+
 ## Configuration
 
 Running `/backlog-init` generates `backlog.config.json` at your project root.
@@ -88,6 +94,8 @@ The main sections are:
 | `qualityGates` | Commands for type checking, linting, testing, building |
 | `codeRules` | Path to code rules file, hard gates, soft gates |
 | `ticketValidation` | Flags for test strategy, affected files, dependency checks, min AC count |
+| `agentRouting` | File-pattern rules mapping to agent types, LLM override toggle |
+| `reviewPipeline` | Reviewer definitions, confidence threshold, max review rounds |
 
 Example (abbreviated):
 
@@ -117,6 +125,30 @@ Example (abbreviated):
   }
 }
 ```
+
+## Agent Routing
+
+The implementer automatically selects the best agent type for each ticket based
+on the files it will modify. Configure rules in `backlog.config.json`:
+
+| File Pattern | Default Agent | Use Case |
+|-------------|--------------|----------|
+| *.tsx, *.jsx, *.vue | frontend | UI components, pages |
+| *.py | backend | APIs, services |
+| *.go, *.rs | backend | Systems programming |
+| Dockerfile, *.tf | devops | Infrastructure |
+| *.ipynb | ml-engineer | ML pipelines |
+
+Set `agentRouting.llmOverride: true` (default) to allow the implementer to
+override routing when ticket context suggests a better agent.
+
+## Review Pipeline
+
+Quality gates use configurable parallel reviewers with confidence-based filtering.
+Default: 2 reviewers (spec-compliance + code-quality). SEC tickets auto-escalate to 4.
+
+Each finding is scored 0-100 confidence. Only findings above the threshold
+(default: 80) are reported, eliminating false positives.
 
 ## Ticket Format
 
