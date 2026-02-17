@@ -1,10 +1,10 @@
 ---
 name: backlog-implementer
-description: "Implement backlog tickets with Agent Teams, wave parallelization, 5 quality gates (Plan→TDD→Lint→Review→Commit), configurable code rules, 2 Iron Laws, ticket enrichment, and cost tracking. Tracks actual tokens/cost per ticket and feeds back to cost-history for estimation improvement. Config-driven and stack-agnostic. v6.1."
+description: "Implement backlog tickets with Agent Teams, wave parallelization, 5 quality gates (Plan→TDD→Lint→Review→Commit), smart agent routing, embedded skill catalog (7 disciplines), configurable review pipeline with confidence scoring, 2 Iron Laws, ticket enrichment, and cost tracking. Config-driven and stack-agnostic. v7.0."
 allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, TaskUpdate, TaskGet
 ---
 
-# Backlog Implementer v6.1 — Config-Driven Agent Teams + Cost Tracking
+# Backlog Implementer v7.0 — Smart Agent Routing + Embedded Skill Catalog + Configurable Reviews
 
 ## Role
 **Leader coordinator**: Selects waves, creates teams, orchestrates quality gates. **DOES NOT implement code directly.**
@@ -31,19 +31,50 @@ All project-specific values come from `backlog.config.json` at project root.
 | Test command | `qualityGates.testCommand` | **Required** |
 | Build command | `qualityGates.buildCommand` | Skip if not set |
 | Health check | `qualityGates.healthCheckCommand` | Skip if not set |
+| Agent routing rules | `agentRouting.rules` | Use general-purpose |
+| Agent LLM override | `agentRouting.llmOverride` | `true` |
+| Review pipeline | `reviewPipeline.reviewers` | 2 reviewers (spec + quality) |
+| Confidence threshold | `reviewPipeline.confidenceThreshold` | 80 |
 
 **At startup**: Read `backlog.config.json`. If `codeRules.source` is set, read that file — its full content is included in every implementer prompt.
 
 ---
 
-## Team Composition (per wave)
+## Team Composition (Smart Routing)
+
+The leader analyzes each ticket's Affected Files and routes to the best agent type.
+
+### Routing Algorithm
+1. Read `Affected Files` from ticket
+2. Match each file against `config.agentRouting.rules` (first match wins)
+3. If multiple files match different agents: majority vote
+4. If `config.agentRouting.llmOverride` is true: LLM can override when ticket signals are clear
+   (e.g., ML ticket with .py files -> ml-engineer instead of backend)
+5. If no match: fall back to general-purpose
+6. Apply ticket-type overrides from `config.agentRouting.overrides`
+
+### Default Routing Rules
+
+| File Pattern | Agent Type | Label |
+|-------------|-----------|-------|
+| *.tsx, *.jsx, *.css, *.vue | frontend | Frontend |
+| *.ts, *.js | backend | Backend TS |
+| *.py | backend | Backend Python |
+| *.go | backend | Backend Go |
+| *.rs | backend | Backend Rust |
+| *.swift | general-purpose | iOS/macOS |
+| *.kt, *.java | general-purpose | Android/JVM |
+| Dockerfile, *.yaml, *.tf | devops | DevOps/Infra |
+| *.ipynb, train*, model* | ml-engineer | ML/AI |
+
+### Team Structure Per Wave
 
 ```
 LEADER (you) — coordinates, DOES NOT implement
-├── implementer-1 (backend | frontend | general-purpose)
-├── implementer-2 (backend | frontend | general-purpose)
+├── implementer-1 ({routed_agent_type} from routing)
+├── implementer-2 ({routed_agent_type} - may differ per ticket)
 ├── implementer-3 (optional, if 3 compatible slots)
-├── code-reviewer (code-quality mode:review)
+├── reviewer-1..N (from reviewPipeline config)
 └── investigator (general-purpose) — unblocks complex tickets
 ```
 
@@ -71,6 +102,24 @@ PHASE 0: STARTUP
   pending = count({config.backlog.dataDir}/pending/*.md)
   if config.qualityGates.healthCheckCommand: run it
   show_banner(pending, state.stats)
+
+PHASE 0.5: DETECT CAPABILITIES
+  available_skills = []
+
+  # Check for superpowers plugin
+  Check if ~/.claude/plugins/ contains superpowers
+  If found: note available skills (TDD, debugging, verification, code-review)
+
+  # Check for stack-specific plugins
+  Based on config.project.stack, check for relevant plugins:
+  - python: pg-aiguide, aws-skills
+  - typescript: playwright-skill
+
+  # Check for MCP servers
+  Note any configured MCP servers from the session
+
+  # Show capabilities banner
+  Log: "Detected capabilities: {list}" or "No external plugins detected, using embedded catalog"
 
 WHILE pending_tickets_exist():
   cycle++
@@ -122,7 +171,32 @@ find {dataDir}/pending -name "*.md" | wc -l
 # Run config.qualityGates.healthCheckCommand
 ```
 
-If `state.version != "5.0"`: migrate schema (add `totalTokensUsed` and `totalCostUsd` to stats, keep everything else).
+If `state.version != "6.0"`: migrate schema (add `agentRoutingStats` and `reviewStats` to stats, keep everything else).
+
+---
+
+## Phase 0.5: Detect Capabilities
+
+```
+available_skills = []
+
+# Check for superpowers plugin
+ls ~/.claude/plugins/
+If superpowers found: note available skills (TDD, debugging, verification, code-review)
+
+# Check for stack-specific plugins
+Based on config.project.stack:
+  python → check for: pg-aiguide, aws-skills
+  typescript → check for: playwright-skill
+
+# Check for MCP servers
+Note any configured MCP servers from the session
+
+# Show capabilities banner
+Log: "Detected capabilities: {list}" or "No external plugins detected, using embedded catalog"
+```
+
+When an external skill is available for a discipline, prefer it over the embedded catalog version.
 
 ---
 
@@ -178,6 +252,22 @@ Implementer receives ticket and MUST:
 3. Write plan in ticket under `## Implementation Plan`
 4. If unclear → message leader: "needs-investigation"
 
+### Catalog Injection
+
+The leader selects catalog disciplines based on ticket type and routing:
+
+| Condition | Disciplines Injected |
+|-----------|---------------------|
+| Always | CAT-TDD, CAT-PERF |
+| Ticket type BUG | + CAT-DEBUG |
+| Ticket type FEAT | + CAT-ARCH |
+| Ticket type SEC | + CAT-SECURITY |
+| Agent = frontend | + CAT-FRONTEND |
+
+The leader reads the relevant catalog files from `catalog/` directory and includes their content in the implementer prompt, AFTER the Code Rules and BEFORE the Iron Laws.
+
+If an external skill was detected in Phase 0.5 for the same discipline, prefer the external skill instructions.
+
 ### Gate 2: IMPLEMENT (TDD)
 
 | Type | Coverage | Minimum |
@@ -221,19 +311,35 @@ Run configured commands on affected files:
 - Auto-fix max 3 attempts
 - If 3 failures: ticket marked `lint-blocked`, skip to next wave
 
-### Gate 4: REVIEW
+### Gate 4: REVIEW (Configurable Pipeline)
 
-Code-reviewer receives changed files and project code rules. Must evaluate:
+Read reviewers from `config.reviewPipeline.reviewers`. Default: 2 reviewers.
 
-1. Does code follow project rules (from `codeRules.source`)?
-2. Are tests comprehensive (happy + error + edge)?
-3. Is there unnecessary complexity or over-engineering?
-4. Are there security concerns?
+**Spawn reviewers in parallel** as team members:
+- Each reviewer receives: changed files, project code rules, CAT-REVIEW catalog
+- Each reviewer evaluates from their configured `focus` perspective
+- Each reviewer scores findings 0-100 confidence
 
-Result: `APPROVED` or `CHANGES_REQUESTED` citing specific rule violations.
+**Focus types:**
+| Focus | What to check |
+|-------|--------------|
+| spec | Does implementation match ticket requirements? All ACs met? |
+| quality | Code quality, DRY, readability, unnecessary complexity |
+| security | OWASP patterns, input validation, auth, secrets |
+| history | Git blame context, regression risk, pattern consistency |
 
-- If CHANGES_REQUESTED → implementer fixes → back to Gate 3
-- Max 3 review rounds. After 3 rejections → `review-blocked`
+**Auto-escalation for SEC tickets:**
+If ticket prefix is SEC and reviewPipeline has < 4 reviewers:
+auto-add security (investigator) + history (investigator) reviewers.
+
+**Consolidation:**
+1. Collect all findings from all reviewers
+2. Filter: only findings with confidence >= config.reviewPipeline.confidenceThreshold
+3. Classify: Critical (must fix) / Important (should fix) / Suggestion (consider)
+4. If any Critical or Important from `required` reviewers: implementer fixes -> re-review
+5. Max `config.reviewPipeline.maxReviewRounds` rounds. After max: `review-blocked`
+
+Result: `APPROVED` (no critical/important findings) or `CHANGES_REQUESTED` (with specific findings).
 
 ### Gate 5: COMMIT
 
@@ -275,7 +381,7 @@ Update ticket frontmatter:
 ```yaml
 status: completed
 completed: {YYYY-MM-DD}
-implemented_by: backlog-implementer-v6
+implemented_by: backlog-implementer-v7
 review_rounds: {N}
 tests_added: {N}
 files_changed: {N}
@@ -422,6 +528,12 @@ Tests added:   {N}
 Review rounds: {avg}
 Failed:        {list or "none"}
 Remaining:     {pending_count}
+─── Routing ───
+Agent types:    {breakdown}
+LLM overrides:  {count}
+─── Reviews ───
+Findings:       {total} ({filtered} filtered by confidence)
+Avg confidence: {avg}%
 ─── Cost ───
 Tokens:        {wave_total_tokens} ({input} in / {output} out)
 Cost:          ${wave_cost_usd}
@@ -432,11 +544,11 @@ Session total: ${session_total_cost_usd}
 
 ---
 
-## State Schema v5.0
+## State Schema v6.0
 
 ```json
 {
-  "version": "5.0",
+  "version": "6.0",
   "lastRunTimestamp": null,
   "lastCycle": 0,
   "currentWave": null,
@@ -451,7 +563,20 @@ Session total: ${session_total_cost_usd}
     "avgReviewRoundsPerTicket": 0,
     "ticketsByType": {},
     "totalTokensUsed": 0,
-    "totalCostUsd": 0
+    "totalCostUsd": 0,
+    "agentRoutingStats": {
+      "frontend": 0,
+      "backend": 0,
+      "devops": 0,
+      "ml-engineer": 0,
+      "general-purpose": 0,
+      "llmOverrides": 0
+    },
+    "reviewStats": {
+      "totalFindings": 0,
+      "filteredByConfidence": 0,
+      "avgConfidence": 0
+    }
   },
   "investigationQueue": [],
   "failedTickets": [],
