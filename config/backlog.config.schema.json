@@ -328,6 +328,11 @@
               "description": "Model alias for draft generation (tickets, plans).",
               "default": "cheap"
             },
+            "entryModelPlan": {
+              "type": "string",
+              "description": "Model alias for planning gates (text-only, no tool_use). Supports Ollama/local models.",
+              "default": "free"
+            },
             "entryModelImplement": {
               "type": "string",
               "description": "Model alias for code implementation.",
