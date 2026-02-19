@@ -10,7 +10,7 @@
     "version": {
       "type": "string",
       "description": "Configuration schema version.",
-      "enum": ["1.0"]
+      "enum": ["1.0", "1.1"]
     },
     "project": {
       "type": "object",
@@ -261,6 +261,316 @@
           "type": "number",
           "description": "Maximum number of review-fix cycles before escalation.",
           "default": 3
+        }
+      }
+    },
+    "llmOps": {
+      "type": "object",
+      "description": "Cloud routing, caching, budgets, and batch policy for cost-optimized LLM usage.",
+      "additionalProperties": false,
+      "properties": {
+        "registry": {
+          "type": "object",
+          "description": "Model registry configuration.",
+          "additionalProperties": false,
+          "properties": {
+            "source": {
+              "type": "string",
+              "description": "Path to model-registry.json.",
+              "default": ".backlog-ops/model-registry.json"
+            },
+            "refreshCommand": {
+              "type": "string",
+              "description": "Command to refresh the model registry.",
+              "default": "bash scripts/ops/sync-model-registry.sh"
+            },
+            "strictMode": {
+              "type": "boolean",
+              "description": "When true, skills can only use aliases defined in the registry.",
+              "default": true
+            }
+          }
+        },
+        "gateway": {
+          "type": "object",
+          "description": "LiteLLM gateway connection settings.",
+          "additionalProperties": false,
+          "properties": {
+            "baseURL": {
+              "type": "string",
+              "description": "LiteLLM proxy base URL.",
+              "default": "http://localhost:4000"
+            },
+            "apiKeyEnv": {
+              "type": "string",
+              "description": "Environment variable name for the LiteLLM master key.",
+              "default": "LITELLM_MASTER_KEY"
+            },
+            "requireEscalationReason": {
+              "type": "boolean",
+              "description": "Require documented reason when escalating to frontier models.",
+              "default": true
+            }
+          }
+        },
+        "routing": {
+          "type": "object",
+          "description": "Model alias routing by workflow phase. Uses aliases from model registry.",
+          "additionalProperties": false,
+          "properties": {
+            "entryModelClassify": {
+              "type": "string",
+              "description": "Model alias for ticket classification/triage.",
+              "default": "cheap"
+            },
+            "entryModelDraft": {
+              "type": "string",
+              "description": "Model alias for draft generation (tickets, plans).",
+              "default": "cheap"
+            },
+            "entryModelImplement": {
+              "type": "string",
+              "description": "Model alias for code implementation.",
+              "default": "balanced"
+            },
+            "entryModelReview": {
+              "type": "string",
+              "description": "Model alias for code review passes.",
+              "default": "cheap"
+            },
+            "escalationModel": {
+              "type": "string",
+              "description": "Model alias for frontier escalation.",
+              "default": "frontier"
+            },
+            "maxEscalationsPerTicket": {
+              "type": "integer",
+              "description": "Maximum frontier escalations allowed per ticket.",
+              "minimum": 0,
+              "default": 1
+            }
+          }
+        },
+        "tokenPolicy": {
+          "type": "object",
+          "description": "Token budget limits by workflow phase.",
+          "additionalProperties": false,
+          "properties": {
+            "maxInputByPhase": {
+              "type": "object",
+              "description": "Max input tokens per phase. Keys: classify, draft, implement, review, refine.",
+              "additionalProperties": { "type": "integer", "minimum": 0 },
+              "default": {
+                "classify": 4000,
+                "draft": 8000,
+                "implement": 32000,
+                "review": 16000,
+                "refine": 12000
+              }
+            },
+            "maxOutputByPhase": {
+              "type": "object",
+              "description": "Max output tokens per phase. Keys: classify, draft, implement, review, refine.",
+              "additionalProperties": { "type": "integer", "minimum": 0 },
+              "default": {
+                "classify": 1000,
+                "draft": 4000,
+                "implement": 16000,
+                "review": 4000,
+                "refine": 8000
+              }
+            },
+            "contextWindowStrategy": {
+              "type": "string",
+              "description": "Strategy for managing context window limits.",
+              "enum": ["truncate-oldest", "summarize", "rag-augment"],
+              "default": "summarize"
+            }
+          }
+        },
+        "cachePolicy": {
+          "type": "object",
+          "description": "Multi-layer caching configuration per ADR-004.",
+          "additionalProperties": false,
+          "properties": {
+            "providerPromptCaching": {
+              "type": "boolean",
+              "description": "Enable Anthropic prompt caching (cache_control breakpoints).",
+              "default": true
+            },
+            "stablePrefixMinTokens": {
+              "type": "integer",
+              "description": "Minimum tokens in stable prefix to qualify for prompt caching (Anthropic requires 1024+).",
+              "minimum": 1024,
+              "default": 2048
+            },
+            "responseCache": {
+              "type": "object",
+              "description": "LiteLLM response cache settings.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean", "default": true },
+                "ttlSeconds": { "type": "integer", "minimum": 0, "default": 3600 },
+                "backend": {
+                  "type": "string",
+                  "enum": ["redis", "s3", "local"],
+                  "default": "redis"
+                }
+              }
+            },
+            "semanticCache": {
+              "type": "object",
+              "description": "Vector-similarity cache for near-duplicate prompts.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "backend": {
+                  "type": "string",
+                  "enum": ["qdrant", "redis-vss", "chromadb"],
+                  "default": "qdrant"
+                },
+                "threshold": {
+                  "type": "number",
+                  "description": "Minimum cosine similarity to count as cache hit.",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "default": 0.88
+                }
+              }
+            }
+          }
+        },
+        "batchPolicy": {
+          "type": "object",
+          "description": "Anthropic/OpenAI Batch API policy for non-interactive workloads.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable batch offloading for eligible phases.",
+              "default": true
+            },
+            "eligiblePhases": {
+              "type": "array",
+              "description": "Workflow phases eligible for batch execution.",
+              "items": { "type": "string" },
+              "default": ["refinement", "bulk-ticket-validation", "cost-report", "duplicate-detection"]
+            },
+            "forceBatchWhenQueueOver": {
+              "type": "integer",
+              "description": "Force batch mode when queue has more items than this threshold.",
+              "minimum": 1,
+              "default": 25
+            },
+            "maxConcurrentBatchJobs": {
+              "type": "integer",
+              "description": "Maximum concurrent batch jobs to submit.",
+              "minimum": 1,
+              "default": 10
+            },
+            "retryPolicy": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "maxRetries": { "type": "integer", "minimum": 0, "default": 3 },
+                "backoffMultiplier": { "type": "number", "minimum": 1, "default": 2.0 }
+              }
+            }
+          }
+        },
+        "ragPolicy": {
+          "type": "object",
+          "description": "RAG (Retrieval-Augmented Generation) configuration for codebase context.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable RAG-based context retrieval for ticket generation and implementation.",
+              "default": false
+            },
+            "embeddingModel": {
+              "type": "string",
+              "description": "Model used for embedding generation.",
+              "default": "text-embedding-3-small"
+            },
+            "vectorStore": {
+              "type": "string",
+              "description": "Vector store backend for embeddings.",
+              "enum": ["qdrant", "chromadb", "local-faiss"],
+              "default": "local-faiss"
+            },
+            "indexPath": {
+              "type": "string",
+              "description": "Path to the local vector index.",
+              "default": ".backlog-ops/rag-index"
+            },
+            "chunkSize": {
+              "type": "integer",
+              "description": "Token chunk size for document splitting.",
+              "minimum": 128,
+              "default": 512
+            },
+            "topK": {
+              "type": "integer",
+              "description": "Number of top chunks to retrieve per query.",
+              "minimum": 1,
+              "default": 10
+            },
+            "reindexCommand": {
+              "type": "string",
+              "description": "Command to rebuild the RAG index.",
+              "default": "python scripts/ops/rag_index.py --rebuild"
+            }
+          }
+        }
+      }
+    },
+    "sentinel": {
+      "type": "object",
+      "description": "Sentinel code-review skill configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "installGitHook": { "type": "boolean", "default": true },
+        "prescan": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "runLinter":        { "type": "boolean", "default": true },
+            "runTests":         { "type": "boolean", "default": true },
+            "runTypeCheck":     { "type": "boolean", "default": true },
+            "detectHardcoded":  { "type": "boolean", "default": true },
+            "detectTodos":      { "type": "boolean", "default": true },
+            "maxFunctionLines": { "type": "integer", "default": 80 }
+          }
+        },
+        "reviewers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "security": { "type": "boolean", "default": true },
+            "quality":  { "type": "boolean", "default": true }
+          }
+        },
+        "ragDeduplication": { "type": "boolean", "default": true },
+        "patternThresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "recurring":          { "type": "integer", "default": 2 },
+            "escalateToSoftGate": { "type": "integer", "default": 3 },
+            "escalateToHardGate": { "type": "integer", "default": 5 }
+          }
+        },
+        "ticketMapping": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "default": {
+            "security": "SEC",
+            "bug": "BUG",
+            "techDebt": "TASK",
+            "architecture": "TASK"
+          }
         }
       }
     }
