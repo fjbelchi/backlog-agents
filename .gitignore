@@ -8,3 +8,5 @@ tmp/
 .claude/cost-history.json
 .env.docker.local
 docker/certs/ca-bundle.crt
+setup.log
+*.bak

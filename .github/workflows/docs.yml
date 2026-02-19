@@ -1,0 +1,24 @@
+name: docs
+
+on:
+  pull_request:
+  push:
+    branches: ["main", "master"]
+
+jobs:
+  validate-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run docs generators
+        run: |
+          ./scripts/docs/generate-config-reference.py
+          ./scripts/docs/generate-model-table.sh
+      - name: Run docs validation
+        run: |
+          ./scripts/docs/check-links.sh
+          ./scripts/docs/verify-snippets.sh
+          ./scripts/docs/check-doc-coverage.py

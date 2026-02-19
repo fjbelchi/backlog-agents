@@ -1,0 +1,102 @@
+# ─── LiteLLM Proxy Config for Backlog Toolkit ────────────────────────
+# Copy this file and adapt for your environment.
+# Docs: docs/reference/litellm-proxy-config.md
+# ADR:  docs/architecture/adr/ADR-004-multilayer-caching-and-batch.md
+
+# ─── Model Aliases ───────────────────────────────────────────────────
+# Skills reference aliases only (cheap/balanced/frontier), never raw model IDs.
+# This decouples your workflows from provider model changes.
+model_list:
+  # CHEAP — 70% of calls: classification, triage, review, lint, drafts
+  - model_name: cheap
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # BALANCED — 25% of calls: implementation, code generation, complex analysis
+  - model_name: balanced
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # FRONTIER — 5% of calls: complex architecture, security audit, escalation
+  - model_name: frontier
+    litellm_params:
+      model: anthropic/claude-opus-4
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # CODE FRONTIER — specialized code model (optional)
+  # - model_name: code_frontier
+  #   litellm_params:
+  #     model: openai/gpt-5-codex
+  #     api_key: os.environ/OPENAI_API_KEY
+
+# ─── Routing & Fallbacks ────────────────────────────────────────────
+router_settings:
+  routing_strategy: simple-shuffle
+  # If cheap fails → try balanced → then frontier
+  fallbacks:
+    - cheap: [balanced, frontier]
+    - balanced: [frontier]
+  # Context window overflow → step up to bigger model
+  context_window_fallbacks:
+    - cheap: [balanced]
+    - balanced: [frontier]
+  # Content policy rejection → try alternate provider
+  content_policy_fallbacks:
+    - cheap: [balanced]
+  # Cooldown failed providers
+  allowed_fails: 3
+  cooldown_time: 60
+
+# ─── Budgets ────────────────────────────────────────────────────────
+litellm_settings:
+  # Global budget
+  budget_duration: monthly
+  max_budget: 1200
+
+  # Request behavior
+  request_timeout: 30
+  num_retries: 2
+
+  # ─── Response Cache (Layer 4) ──────────────────────────────────────
+  # Caches identical API responses. Good for repeated validation/classification.
+  cache: true
+  cache_params:
+    type: redis              # Options: redis, s3, local
+    ttl: 3600                # 1 hour
+    namespace: backlog       # Isolate from other apps
+    # host: localhost
+    # port: 6379
+
+  # ─── Prompt Caching (Layer 3) ──────────────────────────────────────
+  # Anthropic prompt caching is handled at the provider level.
+  # Ensure stable prefixes have cache_control breakpoints.
+  # Minimum prefix size: 1024 tokens (2048+ recommended).
+  # No additional LiteLLM config needed — it's provider-native.
+
+# ─── Per-Model Budgets ──────────────────────────────────────────────
+model_max_budget:
+  frontier: 300              # Hard cap on frontier spend
+  balanced: 600
+  cheap: 300
+
+# ─── Provider Budgets ───────────────────────────────────────────────
+provider_budget_config:
+  anthropic:
+    budget_limit: 1000
+    time_period: 1m          # monthly
+  openai:
+    budget_limit: 200
+    time_period: 1m
+
+# ─── Tag-Based Routing ──────────────────────────────────────────────
+# Skills can tag requests for routing decisions
+general_settings:
+  enable_tag_filtering: true
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+# ─── Guardrails & Metrics ───────────────────────────────────────────
+# Enable Prometheus metrics endpoint at /metrics
+# Configure guardrails via proxy guardrail settings
+# Enable callbacks for spend/telemetry logging

@@ -1,0 +1,207 @@
+# ─── LiteLLM Proxy Config for Docker ─────────────────────────────────
+# Used by docker-compose.yml. Identical to production config but with
+# database_url wired to the compose PostgreSQL service.
+# Docs: docs/reference/litellm-proxy-config.md
+
+# ─── Model Aliases ───────────────────────────────────────────────────
+# Skills reference aliases only (cheap/balanced/frontier), never raw model IDs.
+# This decouples your workflows from provider model changes.
+#
+# Using AWS Bedrock cross-region inference profiles.
+# Authentication: boto3 uses AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY /
+# AWS_SESSION_TOKEN env vars injected by start-services.sh (resolved from
+# host SSO session). No aws_profile_name needed inside Docker.
+#
+# ssl_verify: false — Corporate TLS inspection (Zscaler) re-signs certs with
+# a CA that Python 3.13 rejects (Basic Constraints not marked critical).
+# Since traffic already goes through Zscaler regardless, disabling verify
+# inside the container is safe and the only practical workaround.
+model_list:
+  # CHEAP — 70% of calls: classification, triage, review, lint, drafts
+  - model_name: cheap
+    litellm_params:
+      model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
+      aws_region_name: us-west-2
+      # Explicit pricing — LiteLLM can't resolve bedrock/us.* prefixed model IDs
+      input_cost_per_token: 0.000001        # $1/MTok
+      output_cost_per_token: 0.000005       # $5/MTok
+      cache_read_input_token_cost: 0.0000001     # $0.10/MTok
+      cache_creation_input_token_cost: 0.00000125 # $1.25/MTok
+
+  # BALANCED — 25% of calls: implementation, code generation, complex analysis
+  - model_name: balanced
+    litellm_params:
+      model: bedrock/us.anthropic.claude-sonnet-4-6
+      aws_region_name: us-west-2
+      # Explicit pricing — LiteLLM can't resolve bedrock/us.* prefixed model IDs
+      input_cost_per_token: 0.000003        # $3/MTok
+      output_cost_per_token: 0.000015       # $15/MTok
+      cache_read_input_token_cost: 0.0000003     # $0.30/MTok
+      cache_creation_input_token_cost: 0.00000375 # $3.75/MTok
+
+  # FRONTIER — 5% of calls: complex architecture, security audit, escalation
+  - model_name: frontier
+    litellm_params:
+      model: bedrock/us.anthropic.claude-opus-4-6-v1
+      aws_region_name: us-east-1
+      # Explicit pricing — LiteLLM can't resolve bedrock/us.* prefixed model IDs
+      input_cost_per_token: 0.000005        # $5/MTok
+      output_cost_per_token: 0.000025       # $25/MTok
+      cache_read_input_token_cost: 0.0000005     # $0.50/MTok
+      cache_creation_input_token_cost: 0.00000625 # $6.25/MTok
+
+  # ─── Claude Code aliases ─────────────────────────────────────────────
+  # Claude Code sends these model names. Route them to the same backends
+  # so Claude Code works transparently through the proxy.
+  - model_name: claude-sonnet-4-6
+    litellm_params:
+      model: bedrock/us.anthropic.claude-sonnet-4-6
+      aws_region_name: us-west-2
+      input_cost_per_token: 0.000003
+      output_cost_per_token: 0.000015
+      cache_read_input_token_cost: 0.0000003
+      cache_creation_input_token_cost: 0.00000375
+
+  - model_name: claude-opus-4-6
+    litellm_params:
+      model: bedrock/us.anthropic.claude-opus-4-6-v1
+      aws_region_name: us-east-1
+      input_cost_per_token: 0.000005
+      output_cost_per_token: 0.000025
+      cache_read_input_token_cost: 0.0000005
+      cache_creation_input_token_cost: 0.00000625
+
+  - model_name: claude-haiku-4-5
+    litellm_params:
+      model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
+      aws_region_name: us-west-2
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000005
+      cache_read_input_token_cost: 0.0000001
+      cache_creation_input_token_cost: 0.00000125
+
+  # Claude Code also sends the dated variant of Haiku
+  - model_name: claude-haiku-4-5-20251001
+    litellm_params:
+      model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
+      aws_region_name: us-west-2
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000005
+      cache_read_input_token_cost: 0.0000001
+      cache_creation_input_token_cost: 0.00000125
+
+# ─── Alternative: Direct Anthropic API ──────────────────────────────
+# Uncomment these and comment out Bedrock models above to use Anthropic directly
+#
+# model_list:
+#   - model_name: cheap
+#     litellm_params:
+#       model: anthropic/claude-haiku-4-5
+#       api_key: os.environ/ANTHROPIC_API_KEY
+#
+#   - model_name: balanced
+#     litellm_params:
+#       model: anthropic/claude-sonnet-4-6
+#       api_key: os.environ/ANTHROPIC_API_KEY
+#
+#   - model_name: frontier
+#     litellm_params:
+#       model: anthropic/claude-opus-4
+#       api_key: os.environ/ANTHROPIC_API_KEY
+
+  # CODE FRONTIER — specialized code model (optional)
+  # - model_name: code_frontier
+  #   litellm_params:
+  #     model: openai/gpt-5-codex
+  #     api_key: os.environ/OPENAI_API_KEY
+
+# ─── Routing & Fallbacks ────────────────────────────────────────────
+router_settings:
+  routing_strategy: simple-shuffle
+  # If cheap fails → try balanced → then frontier
+  fallbacks:
+    - cheap: [balanced, frontier]
+    - balanced: [frontier]
+    - claude-haiku-4-5: [claude-sonnet-4-6, claude-opus-4-6]
+    - claude-haiku-4-5-20251001: [claude-sonnet-4-6, claude-opus-4-6]
+    - claude-sonnet-4-6: [claude-opus-4-6]
+  # Context window overflow → step up to bigger model
+  context_window_fallbacks:
+    - cheap: [balanced]
+    - balanced: [frontier]
+    - claude-haiku-4-5: [claude-sonnet-4-6]
+    - claude-haiku-4-5-20251001: [claude-sonnet-4-6]
+    - claude-sonnet-4-6: [claude-opus-4-6]
+  # Content policy rejection → try alternate provider
+  content_policy_fallbacks:
+    - cheap: [balanced]
+    - claude-haiku-4-5: [claude-sonnet-4-6]
+    - claude-haiku-4-5-20251001: [claude-sonnet-4-6]
+  # Cooldown failed providers
+  allowed_fails: 3
+  cooldown_time: 60
+
+# ─── Budgets ────────────────────────────────────────────────────────
+litellm_settings:
+  # SSL verification — disabled for Docker due to corporate TLS inspection (Zscaler).
+  # Python 3.13 rejects Zscaler's CA cert (Basic Constraints not marked critical).
+  # Traffic still goes through Zscaler regardless, so this is safe inside Docker.
+  ssl_verify: false
+
+  # Global budget
+  budget_duration: monthly
+  max_budget: 1200
+
+  # Request behavior
+  request_timeout: 30
+  num_retries: 2
+
+  # ─── Response Cache (Layer 4) ──────────────────────────────────────
+  # Caches identical API responses. Good for repeated validation/classification.
+  cache: true
+  cache_params:
+    type: redis
+    host: redis              # compose service name
+    port: 6379
+    ttl: 3600                # 1 hour
+    namespace: backlog       # Isolate from other apps
+
+  # ─── Prompt Caching (Layer 3) ──────────────────────────────────────
+  # Anthropic prompt caching is handled at the provider level.
+  # Ensure stable prefixes have cache_control breakpoints.
+  # Minimum prefix size: 1024 tokens (2048+ recommended).
+  # No additional LiteLLM config needed — it's provider-native.
+
+# ─── Per-Model Budgets ──────────────────────────────────────────────
+model_max_budget:
+  frontier: 300              # Hard cap on frontier spend
+  balanced: 600
+  cheap: 300
+
+# ─── Provider Budgets ───────────────────────────────────────────────
+provider_budget_config:
+  anthropic:
+    budget_limit: 1000
+    time_period: 1m          # monthly
+  openai:
+    budget_limit: 200
+    time_period: 1m
+
+# ─── General Settings ───────────────────────────────────────────────
+general_settings:
+  # Master key for API authentication
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+  # UI dashboard — connects to compose PostgreSQL service
+  database_url: os.environ/DATABASE_URL
+
+  # Tag-based routing for skills
+  enable_tag_filtering: true
+
+  # Logging
+  disable_spend_logs: false
+
+# ─── Guardrails & Metrics ───────────────────────────────────────────
+# Enable Prometheus metrics endpoint at /metrics
+# Configure guardrails via proxy guardrail settings
+# Enable callbacks for spend/telemetry logging
