@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Backlog management toolkit for Claude Code — ticket creation, refinement, implementation with Agent Teams, and automated code review.",
-    "version": "2.0.2"
+    "version": "2.0.3"
   },
   "plugins": [
     {
@@ -14,10 +14,10 @@
       "source": {
         "source": "url",
         "url": "https://github.com/fjbelchi/backlog-agents.git",
-        "ref": "v2.0.2"
+        "ref": "v2.0.3"
       },
       "description": "Stack-agnostic backlog management: init, ticket, refinement, implementer, sentinel. Includes cost estimation, Agent Teams orchestration, and quality gates.",
-      "version": "2.0.2"
+      "version": "2.0.3"
     }
   ]
 }
