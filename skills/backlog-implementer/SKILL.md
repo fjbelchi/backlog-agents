@@ -350,6 +350,10 @@ Rules:
 - Never parallelize: same file, depends_on relationships, create-then-import chains
 - Tickets affecting different directories almost never conflict
 - Select subagent_type per ticket based on file patterns
+- BATCH SIMILAR TICKETS: If 2+ tickets share the same prefix, same directory, and same
+  change pattern (e.g., "add X to files in dir/"), group them into ONE slot with
+  "batch": true. The implementer processes them sequentially (edit→commit→next) to avoid
+  paying setup overhead multiple times. Mark as: {"batch": true, "ticket_ids": ["T-001","T-002"]}
 
 Return ONLY this JSON:
 {
@@ -844,6 +848,19 @@ If a rule seems impossible to comply with:
 The correct attitude when a hook blocks is NOT "how do I bypass it?"
 but "what is it telling me is wrong with my code?"
 ═══════════════════════════════════════════════════════════════════════
+```
+
+### Context Management (include in EVERY implementer prompt)
+
+```
+CONTEXT RULES — keep context lean to reduce cost:
+- After reading a file >100 lines: extract ONLY relevant lines/functions.
+  State: "Read [path] ([N] lines). Relevant: lines X-Y" then quote only those.
+- After running tests: keep ONLY failure lines + summary count.
+  Discard all PASS output. State: "Tests: X passed, Y failed. Failures: [list]"
+- After grep/glob: keep ONLY matching results (max 20 lines).
+- NEVER quote full file contents in reasoning. Summarize findings.
+- When processing batch tickets: reuse file reads across tickets in the batch.
 ```
 
 ### Leader Enforcement
