@@ -12,10 +12,16 @@ allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete
 ## MODEL RULES FOR TASK TOOL
 
 ```
-model: "sonnet"  → write-agents: wave summary log, planning output files
-no model:        → all other subagents: implementers, reviewers, investigators — inherits parent
+model: "sonnet"  → DEFAULT for ALL subagents: implementers, reviewers,
+                   investigators, write-agents, wave planning
+                   This prevents cost overruns when the parent session
+                   happens to run on a more expensive model (e.g. Opus).
 
-NEVER pass model: to implementer, reviewer, or investigator subagents.
+ESCALATION to parent model (omit model: parameter):
+  - Ticket tagged ARCH or SECURITY
+  - qualityGateFails >= 2 for a ticket
+  - ticket.complexity == "high"
+  In these cases, the subagent inherits the parent model.
 ```
 
 ## OUTPUT DISCIPLINE
@@ -204,20 +210,23 @@ Use the returned JSON to create the team and assign tasks.
 ```
 TeamCreate("impl-{YYYYMMDD-HHmm}")
 
-Spawn teammates via Task tool (NO model: parameter):
+Spawn teammates via Task tool (model: "sonnet" by default):
 
 1. implementer-1:
    subagent_type: select based on ticket area
+   model: "sonnet"  (omit if ARCH/SECURITY/escalation → inherits parent)
    team_name: "impl-{timestamp}"
    name: "implementer-1"
 
 2. code-reviewer:
    subagent_type: "code-quality"
+   model: "sonnet"
    team_name: "impl-{timestamp}"
    name: "code-reviewer"
 
 3. investigator:
    subagent_type: "general-purpose"
+   model: "sonnet"
    team_name: "impl-{timestamp}"
    name: "investigator"
 ```
