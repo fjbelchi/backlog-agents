@@ -387,7 +387,7 @@ If `codeRules.source` is not configured, skip code rules injection but still enf
 
 **Post-file RAG sync**: After each file is written or modified by a subagent, if ragAvailable:
 ```bash
-source scripts/rag/client.sh && rag_upsert_file "{modified_file_path}"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/rag/client.sh" && rag_upsert_file "{modified_file_path}"
 ```
 This keeps the index current during multi-file implementations so later tasks in the same wave can query the latest code state.
 

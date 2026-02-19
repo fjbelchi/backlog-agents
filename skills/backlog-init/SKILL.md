@@ -552,7 +552,7 @@ If enabled:
 1. Check RAG server health: `curl -sf http://localhost:8001/health`
 2. If reachable, run initial index:
    ```bash
-   source scripts/rag/client.sh
+   source "${CLAUDE_PLUGIN_ROOT}/scripts/rag/client.sh"
    rag_index_dir .
    # Also index any existing tickets
    [ -d backlog/data ] && rag_index_dir backlog/data

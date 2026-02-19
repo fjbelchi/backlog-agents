@@ -131,18 +131,27 @@ for skill in "${SELECTED_SKILLS[@]}"; do
   installed+=("$skill")
 done
 
-# ── Copy sentinel scripts (required by backlog-sentinel at runtime) ───
-# backlog-sentinel invokes sentinel_prescan.py and sentinel_patterns.py.
+# ── Copy runtime scripts (sentinel + RAG client) ─────────────────────
+# These scripts are invoked at runtime by skills via ${CLAUDE_PLUGIN_ROOT}.
 # When installed via install.sh, CLAUDE_PLUGIN_ROOT is not set, so we
-# copy the scripts alongside the skills so the user can configure the
-# path if needed. The canonical path via /plugin install uses CLAUDE_PLUGIN_ROOT.
-SCRIPTS_SRC="${SOURCE_DIR}/scripts/ops"
-SCRIPTS_DEST="${TARGET_DIR}/../scripts/ops"
-if [[ -d "$SCRIPTS_SRC" ]]; then
-  mkdir -p "$SCRIPTS_DEST"
-  cp "${SCRIPTS_SRC}/sentinel_prescan.py" "${SCRIPTS_DEST}/" 2>/dev/null || true
-  cp "${SCRIPTS_SRC}/sentinel_patterns.py" "${SCRIPTS_DEST}/" 2>/dev/null || true
-  chmod +x "${SCRIPTS_DEST}/sentinel_prescan.py" "${SCRIPTS_DEST}/sentinel_patterns.py" 2>/dev/null || true
+# copy the scripts alongside the skills. The canonical path via
+# /plugin install uses CLAUDE_PLUGIN_ROOT automatically.
+SCRIPTS_OPS_SRC="${SOURCE_DIR}/scripts/ops"
+SCRIPTS_OPS_DEST="${TARGET_DIR}/../scripts/ops"
+if [[ -d "$SCRIPTS_OPS_SRC" ]]; then
+  mkdir -p "$SCRIPTS_OPS_DEST"
+  cp "${SCRIPTS_OPS_SRC}/sentinel_prescan.py" "${SCRIPTS_OPS_DEST}/" 2>/dev/null || true
+  cp "${SCRIPTS_OPS_SRC}/sentinel_patterns.py" "${SCRIPTS_OPS_DEST}/" 2>/dev/null || true
+  chmod +x "${SCRIPTS_OPS_DEST}/sentinel_prescan.py" "${SCRIPTS_OPS_DEST}/sentinel_patterns.py" 2>/dev/null || true
+fi
+
+SCRIPTS_RAG_SRC="${SOURCE_DIR}/scripts/rag"
+SCRIPTS_RAG_DEST="${TARGET_DIR}/../scripts/rag"
+if [[ -d "$SCRIPTS_RAG_SRC" ]]; then
+  mkdir -p "$SCRIPTS_RAG_DEST"
+  cp "${SCRIPTS_RAG_SRC}/client.sh" "${SCRIPTS_RAG_DEST}/" 2>/dev/null || true
+  cp "${SCRIPTS_RAG_SRC}/client.py" "${SCRIPTS_RAG_DEST}/" 2>/dev/null || true
+  chmod +x "${SCRIPTS_RAG_DEST}/client.sh" "${SCRIPTS_RAG_DEST}/client.py" 2>/dev/null || true
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────
