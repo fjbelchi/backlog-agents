@@ -544,6 +544,24 @@ If the user chose yes, create `.claude/code-rules.md` with:
 
 Create the `.claude/` directory first if it does not exist.
 
+## Step 6: Initialize RAG Index
+
+Check if `llmOps.ragPolicy.enabled` is `true` in the generated `backlog.config.json`.
+
+If enabled:
+1. Check RAG server health: `curl -sf http://localhost:8001/health`
+2. If reachable, run initial index:
+   ```bash
+   source scripts/rag/client.sh
+   rag_index_dir .
+   # Also index any existing tickets
+   [ -d backlog/data ] && rag_index_dir backlog/data
+   ```
+3. Log: `"✓ RAG index initialized for project {project.name}"`
+
+If RAG server is unreachable: log a warning and continue without error:
+> "⚠ RAG server not reachable — skipping initial index. Run 'make rag-index' when services are up."
+
 ## Step 8: Print Summary
 
 After all files are created, print a summary like:
