@@ -12,16 +12,25 @@ allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete
 ## MODEL RULES FOR TASK TOOL
 
 ```
-model: "sonnet"  → DEFAULT for ALL subagents: implementers, reviewers,
-                   investigators, write-agents, wave planning
-                   This prevents cost overruns when the parent session
-                   happens to run on a more expensive model (e.g. Opus).
+model: "haiku"   → DEFAULT for implementers, investigators, write-agents,
+                   wave planning subagents. Cost-optimized tier.
+
+model: "sonnet"  → REVIEWERS ONLY. All Gate 4 review subagents use Sonnet
+                   for higher-quality defect detection.
 
 ESCALATION to parent model (omit model: parameter):
   - Ticket tagged ARCH or SECURITY
   - qualityGateFails >= 2 for a ticket
   - ticket.complexity == "high"
   In these cases, the subagent inherits the parent model.
+
+OLLAMA (free tier, via llm_call.sh):
+  - Wave planning JSON generation
+  - Gate 1 PLAN text generation
+  - Gate 5 COMMIT message generation
+  - Classification/triage
+  These use llm_call.sh --model free. If Ollama fails → fallback to
+  Task(model: "haiku") subagent.
 ```
 
 ## OUTPUT DISCIPLINE
@@ -29,8 +38,8 @@ ESCALATION to parent model (omit model: parameter):
 ```
 - Never output wave analysis or ticket content inline
 - Max response length: ~30 lines
-- Wave planning → delegate to sonnet subagent (returns JSON)
-- Wave summary → delegate to sonnet write-agent (writes log, returns JSON)
+- Wave planning → llm_call.sh --model free (returns JSON), fallback to haiku subagent
+- Wave summary → delegate to haiku write-agent (writes log, returns JSON)
 ```
 
 ## WRITE-AGENT CHUNKING RULE
@@ -78,11 +87,12 @@ Before each LLM call, select the model tier using escalation rules:
 2. Check gate fail count: qualityGateFails >= 2 → "frontier"
 3. Check ticket.complexity == "high" → "frontier"
 4. Use gate default:
-   Gate 1 PLAN      → config.llmOps.routing.entryModelDraft     (default: "balanced")
-   Gate 2 IMPLEMENT → config.llmOps.routing.entryModelImplement  (default: "balanced")
-   Gate 3 LINT      → config.llmOps.routing.entryModelReview     (default: "cheap")
-   Gate 4 REVIEW    → config.llmOps.routing.entryModelReview     (default: "cheap")
-   Gate 5 COMMIT    → always "cheap"
+   Wave Plan  → config.llmOps.routing.entryModelPlan      (default: "free" via llm_call.sh)
+   Gate 1 PLAN      → config.llmOps.routing.entryModelPlan (default: "free" via llm_call.sh)
+   Gate 2 IMPLEMENT → config.llmOps.routing.entryModelImplement  (default: "cheap")
+   Gate 3 LINT      → always "cheap" (runs tools, LLM analyzes output)
+   Gate 4 REVIEW    → config.llmOps.routing.entryModelReview     (default: "balanced")
+   Gate 5 COMMIT    → "free" via llm_call.sh (template fallback if Ollama unavailable)
 ```
 
 Model aliases resolve via LiteLLM config: `free` → Ollama qwen3-coder, `cheap` → Haiku, `balanced` → Sonnet, `frontier` → Opus.
