@@ -9,9 +9,23 @@ allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete
 ## Role
 **Leader coordinator**: Selects waves, creates teams, orchestrates quality gates. **DOES NOT implement code directly.**
 
-## ⚠️ CRITICAL: DO NOT PASS model: TO TASK TOOL
+## MODEL RULES FOR TASK TOOL
 
-Never pass the `model:` parameter when spawning subagents. They inherit the parent model automatically.
+```
+model: "sonnet"  → write-agents: wave summary log, planning output files
+no model:        → all other subagents: implementers, reviewers, investigators — inherits parent
+
+NEVER pass model: to implementer, reviewer, or investigator subagents.
+```
+
+## OUTPUT DISCIPLINE
+
+```
+- Never output wave analysis or ticket content inline
+- Max response length: ~30 lines
+- Wave planning → delegate to sonnet subagent (returns JSON)
+- Wave summary → delegate to sonnet write-agent (writes log, returns JSON)
+```
 
 ---
 
@@ -308,18 +322,44 @@ When an external skill is available for a discipline, prefer it over the embedde
 
 ## Phase 1: Wave Selection
 
-### Algorithm
+Read ticket metadata (IDs, priorities, affected files) — do NOT output analysis inline.
 
-1. Read top 10 tickets by priority (P0 first)
-2. For each ticket: list files it will modify (blast radius from Affected Files section)
-3. Group into 2-3 slots WITHOUT file conflicts
-4. Tickets affecting different directories almost never conflict
+Delegate wave planning to a sonnet subagent:
 
-### NEVER parallelize
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",
+  prompt: """
+Analyze these tickets and return a wave plan as JSON. Do NOT output explanations.
 
-- Two tickets modifying the same file
-- Tickets with explicit `depends_on` relationships
-- Tickets where one creates what another imports
+Tickets (id, priority, affected_files):
+{ticket_metadata_list}
+
+Rules:
+- Group into 2-3 slots WITHOUT file conflicts
+- Never parallelize: same file, depends_on relationships, create-then-import chains
+- Tickets affecting different directories almost never conflict
+- Select subagent_type per ticket based on file patterns
+
+Return ONLY this JSON:
+{
+  "waves": [
+    {
+      "wave": 1,
+      "tickets": [
+        {"id": "BUG-001", "subagent_type": "backend", "rationale": "auth service"},
+        {"id": "FEAT-003", "subagent_type": "frontend", "rationale": "UI component"}
+      ]
+    }
+  ],
+  "skipped": [{"id": "FEAT-010", "reason": "depends on BUG-001"}]
+}
+"""
+)
+```
+
+Use the returned JSON to create the team and assign tasks.
 
 ---
 
@@ -666,24 +706,38 @@ save_state(".claude/implementer-state.json")
 
 ## Phase 6: Wave Summary
 
+Delegate log writing to a sonnet write-agent, then print a 5-line banner.
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",
+  prompt: """
+You are a write-agent. Append a wave summary entry to .backlog-ops/wave-log.md using the Write tool.
+Do NOT output the content in your response.
+
+Create or append to: .backlog-ops/wave-log.md
+
+Entry to append:
+## Wave {N} — {YYYY-MM-DD HH:mm}
+- Tickets: {completed}/{attempted} | Failed: {failed_list}
+- Tests added: {N} | Review rounds (avg): {avg}
+- Agents: {agent_breakdown} | LLM overrides: {count}
+- Findings: {total} ({filtered} filtered) | Avg confidence: {avg}%
+- Tokens: {wave_total_tokens} | Cost: ${wave_cost_usd} | Session total: ${session_total_cost_usd}
+
+After writing, return ONLY:
+{"file": ".backlog-ops/wave-log.md", "lines": N, "status": "ok"}
+"""
+)
+```
+
+After receiving JSON, print this banner:
+
 ```
 ═══ WAVE {N} COMPLETE ═══
-Tickets:       {completed}/{attempted}
-Tests added:   {N}
-Review rounds: {avg}
-Failed:        {list or "none"}
-Remaining:     {pending_count}
-─── Routing ───
-Agent types:    {breakdown}
-LLM overrides:  {count}
-─── Reviews ───
-Findings:       {total} ({filtered} filtered by confidence)
-Avg confidence: {avg}%
-─── Cost ───
-Tokens:        {wave_total_tokens} ({input} in / {output} out)
-Cost:          ${wave_cost_usd}
-Accuracy:      {avg_estimate_accuracy}% vs ticket estimates
-Session total: ${session_total_cost_usd}
+Tickets: {completed}/{attempted} | Tests: +{N} | Cost: ${wave_cost_usd}
+Remaining: {pending_count} | Session total: ${session_total_cost_usd}
 ══════════════════════════
 ```
 

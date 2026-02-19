@@ -52,11 +52,14 @@ After writing, return ONLY this JSON:
 
 ```
 Model rules for Task tool subagents:
-- model: "haiku"  → write-agents: file creation, report generation,
+- model: "sonnet" → write-agents: file creation, report generation,
                      ticket writing, config generation, summaries
 - no model:       → analysis agents: code review, security analysis,
                      architecture decisions, implementation — inherits parent
 ```
+
+Note: haiku was evaluated but found unreliable for complex template-following.
+Sonnet is the recommended model for write-agents.
 
 ### Output Discipline Rule (add to all skills)
 

@@ -1,12 +1,30 @@
 ---
 name: backlog-init
 description: "Initialize backlog system in any project. Creates directory structure, templates, config, and conventions. Stack-agnostic with auto-detection."
-allowed-tools: Read, Write, Bash, Glob, Grep, AskUserQuestion
+allowed-tools: Read, Write, Bash, Glob, Grep, AskUserQuestion, Task
 ---
 
 # Backlog Init Skill
 
 Initialize a backlog system in the current project. This skill detects the project stack, creates the directory structure, writes ticket templates, generates `backlog.config.json`, and optionally creates `.claude/code-rules.md`.
+
+## MODEL RULES FOR TASK TOOL
+
+```
+model: "sonnet"  → write-agents: config generation, template writing, directory setup
+no model:        → analysis agents — inherits parent
+```
+
+## OUTPUT DISCIPLINE
+
+```
+- Never output file content or config content inline in your response
+- Max response length: ~20 lines
+- Steps 3+4 (directory structure + config generation) → delegate to sonnet write-agent
+- Parent prints compact 5-line summary after write-agent returns
+```
+
+---
 
 ## Step 1: Detect Project Context
 
@@ -34,9 +52,50 @@ Use **AskUserQuestion** to confirm or adjust:
 3. **Ticket prefixes** — default all enabled: TASK, BUG, FEAT, IDEA. Ask which to keep.
 4. **Create `.claude/code-rules.md`?** — yes/no, default yes.
 
-## Step 3: Create Directory Structure
+## Step 3: Create Directory Structure + Step 4: Generate Config (delegated)
 
-Use Write (with `.gitkeep` files) and Bash (`mkdir -p`) to create:
+After confirming with user, spawn a sonnet write-agent that creates all files:
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",
+  prompt: """
+You are a write-agent. Create the full backlog directory structure and config file.
+Do NOT output file content in your response.
+
+Project details:
+  name: {project_name}
+  stack: {detected_stack}
+  dataDir: backlog/data
+  templatesDir: backlog/templates
+  ticketPrefixes: {chosen_prefixes}
+  qualityGates: {stack_commands}
+
+Tasks:
+1. Create backlog/data/pending/.gitkeep (empty file)
+2. Create backlog/data/completed/.gitkeep (empty file)
+3. Copy templates from ${CLAUDE_PLUGIN_ROOT}/templates/ to backlog/templates/
+   (task-template.md, bug-template.md, feature-template.md, idea-template.md)
+4. Write backlog.config.json at project root with all values above
+   (use the full config schema from the skill — all sections: project, backlog, ticketValidation, qualityGates, llmOps, sentinel)
+
+After writing all files, return ONLY:
+{"files_created": N, "config": "backlog.config.json", "status": "ok", "summary": "Initialized backlog for {project_name} ({stack})"}
+"""
+)
+```
+
+Receive JSON, then print:
+
+```
+✓ Backlog initialized for {project_name}
+  Stack: {stack} | Files created: {N}
+  Config: backlog.config.json
+  Next: /backlog-toolkit:ticket "your first ticket"
+```
+
+The directory structure created (reference for write-agent prompt):
 
 ```
 backlog/
@@ -54,9 +113,9 @@ Create the `.gitkeep` files:
 - `backlog/data/pending/.gitkeep` (empty)
 - `backlog/data/completed/.gitkeep` (empty)
 
-## Step 4: Generate `backlog.config.json`
+## Step 4: Generate `backlog.config.json` (reference schema for write-agent)
 
-Write `backlog.config.json` at the project root. Use the detected/chosen stack to pick quality gate commands from this table:
+The write-agent from Step 3 handles this. Use the detected/chosen stack to pick quality gate commands from this table:
 
 | Stack | typeCheckCommand | lintCommand | testCommand |
 |-------|-----------------|-------------|-------------|

@@ -8,9 +8,22 @@ allowed-tools: Read, Glob, Grep, Bash, Write, Edit, Task, TeamCreate, TeamDelete
 
 One-shot code review skill. Analyzes HEAD commit, creates tickets for every finding, updates the pattern ledger for continuous learning. No daemon, no infinite loop — runs once and exits.
 
-## ⚠️ CRITICAL: DO NOT PASS model: TO TASK TOOL
+## MODEL RULES FOR TASK TOOL
 
-Never pass `model:` when spawning subagents. They inherit the parent model automatically.
+```
+model: "sonnet"  → write-agents: ticket file creation (Phase 2)
+no model:        → reviewers (security, quality) — inherits parent
+
+NEVER pass model: to reviewer subagents.
+```
+
+## OUTPUT DISCIPLINE
+
+```
+- Never create ticket content inline in your response
+- Max response length: ~30 lines
+- Phase 2 ticket creation → parallel sonnet write-agents (max 5 at once)
+```
 
 ---
 
@@ -91,35 +104,47 @@ PHASE 1: SPAWN REVIEWER TEAM
 PHASE 2: CREATE TICKETS
   all_findings = [prescan_findings (non-duplicate)] + reviewer_findings
 
-  FOR each finding:
-    IF finding.duplicate_skipped: continue
-
+  FOR each finding: determine ticket_prefix and auto_tags (no output):
     ticket_prefix = config.sentinel.ticketMapping[finding.category] or "TASK"
-    auto_tags = []
-    IF finding.category == "security" OR re.search(r"auth|crypto|inject|xss|token|secret", finding.description, re.I):
-      auto_tags.append("SECURITY")
-    IF re.search(r"architect|refactor|migrat|redesign|schema|breaking", finding.description, re.I):
-      auto_tags.append("ARCH")
+    auto_tags = ["SECURITY"] if security-related, ["ARCH"] if architecture-related, else []
 
-    Create ticket (inline, using backlog-ticket skill logic):
-      - Read backlog.config.json for dataDir and ticketPrefixes
-      - Auto-assign next sequential ID for ticket_prefix
-      - Fill all required sections:
-          title: first 80 chars of finding.description
-          context: "Found in commit {commit_hash} ({author}, {date}) by backlog-sentinel v1.0"
-          description: {finding.description}. File: {finding.file}, line {finding.line}.
-                       Current code: {finding.current_code if available}
-                       Suggested fix: {finding.suggested_fix if available}
-          affected_files: [{finding.file}]
-          acceptance_criteria:
-            - [ ] AC-1: Issue at {finding.file}:{finding.line} is resolved
-            - [ ] AC-2: Regression test added for this scenario
-            - [ ] AC-3: No similar pattern introduced in nearby code
-          tags: auto_tags
-          batchEligible: true
-          found_by: "backlog-sentinel-v1"
-      - Run validation checks 1-3 (completeness, coherence, gaps)
-      - Write to {config.backlog.dataDir}/pending/{ticket_prefix}-{NNN}.md
+  Spawn parallel sonnet write-agents (max 5 at once) — one per finding:
+
+  FOR each batch of up to 5 findings:
+    FOR each finding in batch:
+      Task(
+        subagent_type: "general-purpose",
+        model: "sonnet",
+        prompt: """
+You are a write-agent. Create a backlog ticket file using the Write tool.
+Do NOT output ticket content in your response.
+
+Write to: {config.backlog.dataDir}/pending/{ticket_prefix}-{NNN}.md
+
+Ticket content:
+  id: {ticket_prefix}-{NNN}
+  title: {first 80 chars of finding.description}
+  status: pending
+  priority: {high if security, medium otherwise}
+  tags: {auto_tags}
+  batchEligible: true
+  found_by: backlog-sentinel-v1
+  context: Found in commit {commit_hash} ({author}, {date}) by backlog-sentinel v1.0
+  description: {finding.description}
+               File: {finding.file}, line {finding.line}
+               Current code: {finding.current_code}
+               Suggested fix: {finding.suggested_fix}
+  affected_files: [{finding.file}]
+  acceptance_criteria:
+    - [ ] AC-1: Issue at {finding.file}:{finding.line} is resolved
+    - [ ] AC-2: Regression test added for this scenario
+    - [ ] AC-3: No similar pattern introduced in nearby code
+
+After writing, return ONLY:
+{"file": "{path}", "ticket_id": "{ticket_prefix}-{NNN}", "status": "ok"}
+"""
+      )
+    Wait for batch to complete, collect results
 
 PHASE 3: LEARNING + CLEANUP + SUMMARY
   Write all findings to /tmp/sentinel-findings-{commit_hash}.json

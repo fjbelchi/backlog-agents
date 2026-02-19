@@ -12,19 +12,23 @@ This skill runs inside a target project that has been initialized with `backlog-
 
 ---
 
-## CRITICAL RULE: DO NOT PASS model: TO TASK TOOL
+## MODEL RULES FOR TASK TOOL
 
 ```
-When invoking any Task tool subagent, NEVER pass the model: parameter.
-The subagent inherits the parent's model automatically (always the latest version).
+model: "sonnet"  → write-agents: report generation, ticket file updates
+no model:        → analysis agents: code verification, duplicate detection — inherits parent
 
-PROHIBITED:
-  - model: "opus"
-  - model: "sonnet"
-  - model: "haiku"
+PROHIBITED for analysis agents:
+  - model: "opus" / model: "haiku"
+```
 
-REQUIRED:
-  - Omit the model parameter entirely in every Task tool call
+## OUTPUT DISCIPLINE
+
+```
+- Never output ticket content or report content inline in your response
+- Max response length: ~30 lines
+- Use Write tool for files < 50 lines
+- Use sonnet write-agent (Task tool, model: "sonnet") for report and ticket batches
 ```
 
 ---
@@ -365,7 +369,92 @@ Do NOT delete the ticket. Leave it in pending/ with the duplicate marker so a hu
 
 ## Phase 5: Output
 
-Generate a report at `backlog/REFINEMENT-REPORT-{YYYY-MM-DD}.md`.
+Spawn a sonnet write-agent to generate and write the report. Do NOT generate the report inline.
+
+Determine the report path: `backlog/REFINEMENT-REPORT-{YYYY-MM-DD}.md`.
+If that file already exists, use: `backlog/REFINEMENT-REPORT-{YYYY-MM-DD}-{HHmm}.md`.
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",
+  prompt: """
+You are a write-agent. Write a refinement report using the Write tool.
+Do NOT output the report content in your response.
+
+Write to: {report_path}
+
+Data to include:
+  date: {YYYY-MM-DD}
+  tickets_processed: {N}
+  validated: {N} | updated: {N} | obsolete: {N} | duplicates: {N}
+  by_type: [{prefix, total, validated, updated, obsolete, duplicate}]
+  issues_found: [{ticket_id, description}]
+  human_review_needed: [{ticket_id, reason}]
+  health_score: {score}/100
+  health_breakdown: {valid_pct, test_strategy_pct, deps_pct, affected_files_pct, duplicates, obsolete}
+
+Report structure:
+# Refinement Report {date}
+## Summary ... ## By Type ... ## Issues Found ... ## Tickets Requiring Human Review ... ## Backlog Health Score: {score}/100
+
+After writing, return ONLY:
+{"file": "{report_path}", "lines": N, "status": "ok", "summary": "Health: {score}/100, {N} tickets processed"}
+"""
+)
+```
+
+Receive the JSON, then print:
+
+```
+Refinement complete — {report_path}
+Health score: {score}/100 | Processed: {N} | Updated: {N} | Obsolete: {N} | Duplicates: {N}
+```
+
+The legacy report structure (kept for reference in write-agent prompt):
+
+```markdown
+# Refinement Report {YYYY-MM-DD}
+
+## Summary
+- Tickets processed: X
+- Validated: X | Updated: X | Obsolete: X | Duplicates: X
+
+## By Type
+| Prefix | Total | Validated | Updated | Obsolete | Duplicate |
+|--------|-------|-----------|---------|----------|-----------|
+| SEC | N | N | N | N | N |
+| BUG | N | N | N | N | N |
+| QUALITY | N | N | N | N | N |
+| FEAT | N | N | N | N | N |
+| ... | ... | ... | ... | ... | ... |
+
+## Issues Found
+- [{ticket-id}]: {brief description of what was wrong or changed}
+- [{ticket-id}]: {brief description}
+
+## Tickets Requiring Human Review
+- [{ticket-id}]: {reason human review is needed}
+
+## Backlog Health Score: X/100
+
+Health score calculation:
+- Base: 100 points
+- Deduct 5 points per obsolete ticket found
+- Deduct 3 points per ticket missing required sections
+- Deduct 10 points per duplicate found
+- Deduct 2 points per ticket without test strategy
+- Deduct 2 points per ticket without dependencies documented
+- Minimum score: 0
+
+Breakdown:
+- Valid tickets: X% (X/Y)
+- Tickets with test strategy: X% (X/Y)
+- Tickets with dependencies documented: X% (X/Y)
+- Tickets with affected files: X% (X/Y)
+- Duplicates detected: X
+- Obsolete tickets removed: X
+```
 
 If a report for today already exists, append a timestamp: `REFINEMENT-REPORT-{YYYY-MM-DD}-{HHmm}.md`.
 
