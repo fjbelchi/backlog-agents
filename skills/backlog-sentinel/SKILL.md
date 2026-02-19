@@ -25,6 +25,15 @@ NEVER pass model: to reviewer subagents.
 - Phase 2 ticket creation → parallel sonnet write-agents (max 5 at once)
 ```
 
+## WRITE-AGENT CHUNKING RULE
+
+Write-agents MUST write files in chunks to avoid hitting the output token limit:
+```
+1. Write tool    → first chunk (~40-50 lines): creates the file
+2. Bash cat >>   → each subsequent chunk (~40-50 lines): appends sections
+Never generate more than 50 lines of file content per tool call.
+```
+
 ---
 
 ## Configuration

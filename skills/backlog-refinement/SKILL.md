@@ -31,6 +31,15 @@ PROHIBITED for analysis agents:
 - Use sonnet write-agent (Task tool, model: "sonnet") for report and ticket batches
 ```
 
+## WRITE-AGENT CHUNKING RULE
+
+Write-agents MUST write files in chunks to avoid hitting the output token limit:
+```
+1. Write tool    → first chunk (~40-50 lines): creates the file
+2. Bash cat >>   → each subsequent chunk (~40-50 lines): appends sections
+Never generate more than 50 lines of file content per tool call.
+```
+
 ---
 
 ## Phase 1: Inventory

@@ -42,6 +42,11 @@ Haiku write-agent (generates, writes files):
 You are a write-agent. Your only job is to create files using the Write tool.
 Do NOT output file content in your response.
 
+CHUNKING RULE: Write files in chunks to avoid the 4096 output token limit:
+1. Write tool    → first chunk (~40-50 lines max): creates the file
+2. Bash cat >>   → each subsequent chunk (~40-50 lines): appends sections
+Never generate more than 50 lines of file content in a single tool call.
+
 [task-specific context and template]
 
 After writing, return ONLY this JSON:
