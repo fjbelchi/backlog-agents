@@ -17,6 +17,18 @@
 # Since traffic already goes through Zscaler regardless, disabling verify
 # inside the container is safe and the only practical workaround.
 model_list:
+  # FREE — local model: classification, triage, wave planning, write-agents
+  # Requires Ollama running on host with qwen3-coder:30b
+  # Falls back to cheap (Haiku) if Ollama is unavailable
+  - model_name: free
+    litellm_params:
+      model: ollama/qwen3-coder:30b
+      api_base: http://host.docker.internal:11434
+      tags: ["local"]
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      request_timeout: 120
+
   # CHEAP — 70% of calls: classification, triage, review, lint, drafts
   - model_name: cheap
     litellm_params:
@@ -120,6 +132,7 @@ router_settings:
   routing_strategy: simple-shuffle
   # If cheap fails → try balanced → then frontier
   fallbacks:
+    - free: [cheap, balanced]
     - cheap: [balanced, frontier]
     - balanced: [frontier]
     - claude-haiku-4-5: [claude-sonnet-4-6, claude-opus-4-6]
@@ -127,6 +140,7 @@ router_settings:
     - claude-sonnet-4-6: [claude-opus-4-6]
   # Context window overflow → step up to bigger model
   context_window_fallbacks:
+    - free: [cheap]
     - cheap: [balanced]
     - balanced: [frontier]
     - claude-haiku-4-5: [claude-sonnet-4-6]
@@ -180,6 +194,7 @@ litellm_settings:
 
 # ─── Per-Model Budgets ──────────────────────────────────────────────
 model_max_budget:
+  free: 0                    # Local model, no cloud cost
   frontier: 300              # Hard cap on frontier spend
   balanced: 600
   cheap: 300

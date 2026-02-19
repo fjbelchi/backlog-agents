@@ -1040,9 +1040,14 @@ start_ollama() {
     sleep 3
 
     if curl -s http://localhost:11434/api/tags &> /dev/null; then
-        log_success "Ollama started successfully"
+        # Verify qwen3-coder model is available
+        if ollama list 2>/dev/null | grep -q "qwen3-coder"; then
+            log_success "Ollama started (qwen3-coder available)"
+        else
+            log_warning "Ollama running but qwen3-coder not found. Run: ollama pull qwen3-coder:30b"
+        fi
     else
-        log_warning "Ollama failed to start (optional service)"
+        log_warning "Ollama failed to start (optional — LiteLLM will fall back to Haiku)"
     fi
 }
 

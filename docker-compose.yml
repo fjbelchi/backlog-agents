@@ -46,6 +46,8 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      # Ollama host for local model routing (host.docker.internal resolves to host machine)
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
       # Store model info and spend logs in DB (required for prompt logging in UI)
       STORE_MODEL_IN_DB: "True"
       # Use local model cost map (don't fetch from GitHub — blocked by Zscaler SSL)
