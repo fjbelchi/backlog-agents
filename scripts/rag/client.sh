@@ -3,7 +3,13 @@
 # Usage: source scripts/rag/client.sh
 
 RAG_BASE_URL="${RAG_BASE_URL:-http://localhost:8001}"
-_RAG_CLIENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve script directory: BASH_SOURCE works in bash; zsh uses $0 when sourced
+_rag_self="${BASH_SOURCE[0]:-}"
+if [[ -z "$_rag_self" || "$_rag_self" == "bash" ]]; then
+  # zsh fallback: use $0 expanded to absolute path
+  _rag_self="${(%):-%x}" 2>/dev/null || _rag_self="$0"
+fi
+_RAG_CLIENT_DIR="$(cd "$(dirname "$_rag_self")" 2>/dev/null && pwd)"
 
 rag_detect_project() {
     local dir="${1:-$(pwd)}"
