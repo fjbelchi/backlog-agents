@@ -21,7 +21,8 @@
     "./commands/init.md",
     "./commands/ticket.md",
     "./commands/refinement.md",
-    "./commands/implementer.md"
+    "./commands/implementer.md",
+    "./commands/sentinel.md"
   ],
   "skills": "./skills/"
 }
