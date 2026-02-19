@@ -108,6 +108,7 @@ claude --plugin-dir /path/to/backlog-agents
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #8088 | 6:16 PM | ✅ | Release Version 2.0.3 with Path Fixes | ~256 |
 | #8056 | 5:53 PM | 🔵 | Plugin Version Mismatch Identified | ~284 |
 | #8055 | " | ✅ | Marketplace Configuration Version Update | ~243 |
 | #8050 | 5:51 PM | ✅ | Backlog Toolkit Version Bumped to 2.0.1 | ~246 |
