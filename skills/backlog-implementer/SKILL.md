@@ -264,7 +264,7 @@ Spawn teammates via Task tool (model: "sonnet" by default):
 
 ### Gate 1: PLAN
 
-**Model**: apply escalation rules (see Cost-Aware Execution). Default: `entryModelDraft` (balanced).
+**Model**: apply escalation rules (see Cost-Aware Execution). Default: `entryModelPlan` (free via llm_call.sh). If Ollama unavailable or response invalid → fallback to Task(model: "haiku").
 **RAG**: if ragAvailable:
 1. `POST {serverUrl}/search` with ticket description, get top-K snippets instead of full file reads
 2. Query sentinel memory: `POST {serverUrl}/search` with affected_files, filter `{"found_by": "backlog-sentinel"}`, n_results=3. If results with distance < 0.3, inject at TOP of implementer prompt: `WARNING: RECURRING PATTERNS -- avoid these known mistakes: {pattern.description} (found in {pattern.file})`
@@ -286,7 +286,7 @@ If an external skill was detected in Phase 0.5 for the same discipline, prefer t
 
 ### Gate 2: IMPLEMENT (TDD)
 
-**Model**: apply escalation rules. Default: `entryModelImplement` (balanced). Escalate to frontier if ARCH/SECURITY tag or qualityGateFails >= 2.
+**Model**: apply escalation rules. Default: `entryModelImplement` (cheap/Haiku). Escalate to balanced if qualityGateFails >= 1, frontier if ARCH/SECURITY tag or qualityGateFails >= 2.
 
 Min 3 tests per ticket: 1 happy path (main flow) + 1 error path (invalid inputs, auth) + 1 edge case (boundary, empty, null). Order: failing tests -> minimal code -> tests pass.
 
@@ -317,7 +317,7 @@ Run on affected files: `typeCheckCommand` (0 errors), `lintCommand` (0 warnings)
 
 ### Gate 4: REVIEW (Configurable Pipeline)
 
-**Model**: `entryModelReview` (cheap) for first round; escalate to balanced after 1st failure, frontier after 2nd.
+**Model**: `entryModelReview` (balanced/Sonnet). Sonnet provides higher-quality defect detection. Escalate to frontier after 2nd review failure.
 
 Read reviewers from `config.reviewPipeline.reviewers`. Default: 2 reviewers.
 
@@ -333,6 +333,21 @@ Read reviewers from `config.reviewPipeline.reviewers`. Default: 2 reviewers.
 **Consolidation**: Collect findings, filter by confidence >= `confidenceThreshold`, classify (Critical/Important/Suggestion). Critical/Important from `required` reviewers triggers re-review. Max `maxReviewRounds` then `review-blocked`. Result: `APPROVED` or `CHANGES_REQUESTED`.
 
 ### Gate 5: COMMIT
+
+Generate commit message via Ollama (free), template fallback:
+
+```bash
+COMMIT_MSG=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free \
+  --system "Generate a git commit message in Conventional Commits format. Return ONLY the message, no explanation." \
+  --user "Type: {type}, Area: {area}, Ticket: {ticket_id}, Changes: {summary}")
+
+# Fallback to template if Ollama fails
+if [ -z "$COMMIT_MSG" ]; then
+  COMMIT_MSG="{type}({area}): implement {ticket_id}"
+fi
+```
+
+Then use $COMMIT_MSG in the git commit:
 
 Only after reviewer approval:
 
@@ -394,7 +409,7 @@ Delegate log writing to a sonnet write-agent, then print a 5-line banner.
 ```
 Task(
   subagent_type: "general-purpose",
-  model: "sonnet",
+  model: "haiku",
   prompt: """
 You are a write-agent. Append a wave summary entry to .backlog-ops/wave-log.md using the Write tool.
 Do NOT output the content in your response.
