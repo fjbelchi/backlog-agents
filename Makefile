@@ -1,4 +1,4 @@
-.PHONY: help setup validate test refresh cost ops clean docker-up docker-down docker-logs docker-ps
+.PHONY: help setup validate test refresh cost ops clean docker-up docker-down docker-logs docker-ps rag-status rag-index rag-search rag-clear
 
 SHELL := /bin/bash
 LEDGER ?= .backlog-ops/usage-ledger.jsonl
@@ -106,3 +106,18 @@ docker-logs: ## Tail Docker logs
 
 docker-ps: ## Show Docker service status
 	docker compose --env-file .env.docker.local ps
+
+# ─── RAG ────────────────────────────────────────────────────────────
+
+rag-status: ## Show RAG index stats for current project
+	@source scripts/rag/client.sh && rag_status | python3 -m json.tool
+
+rag-index: ## Index project files into RAG (make rag-index DIR=./src)
+	@source scripts/rag/client.sh && rag_index_dir "$(or $(DIR),.)"
+
+rag-search: ## Search RAG index (make rag-search QUERY="auth logic")
+	@test -n "$(QUERY)" || (echo "Usage: make rag-search QUERY=\"auth logic\"" && exit 1)
+	@source scripts/rag/client.sh && rag_search "$(QUERY)" | python3 -m json.tool
+
+rag-clear: ## Clear RAG index for current project (make rag-clear [PROJECT=name])
+	@source scripts/rag/client.sh && rag_clear "$(PROJECT)"
