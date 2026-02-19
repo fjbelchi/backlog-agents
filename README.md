@@ -35,7 +35,7 @@ For first-time users, use the interactive setup wizard:
 
 ```bash
 # Clone repository
-git clone https://github.com/[your-org]/backlog-agents.git
+git clone https://github.com/fjbelchi/backlog-agents.git
 cd backlog-agents
 
 # Run interactive setup
@@ -63,24 +63,33 @@ This automatically:
 
 ## Installation
 
-### Via Plugin (recommended)
+### Via Marketplace (recommended)
 
-Clone this repo, then install into Claude Code:
+Install directly from Claude Code without cloning anything:
 
 ```bash
-git clone https://github.com/your-org/backlog-agents.git
-cd backlog-agents
+# 1. Register the marketplace (one time only):
+/plugin marketplace add fjbelchi/backlog-agents
 
-# Install as a plugin (skills available as /backlog-toolkit:* commands):
+# 2. Install the plugin:
+/plugin install backlog-toolkit@backlog-agents
+```
+
+Skills are immediately available as `/backlog-toolkit:init`, `/backlog-toolkit:ticket`, etc.
+
+### Via Plugin path (local clone)
+
+```bash
+git clone https://github.com/fjbelchi/backlog-agents.git
+
+# Install permanently:
 /plugin install --path /path/to/backlog-agents
 
-# Or load temporarily for the current session only:
+# Or load for the current session only:
 claude --plugin-dir /path/to/backlog-agents
 ```
 
-After installation, skills are available as `/backlog-toolkit:init`, `/backlog-toolkit:ticket`, etc.
-
-### Via install.sh (manual)
+### Via install.sh (manual, no plugin system)
 
 ```bash
 ./install.sh                    # global: ~/.claude/skills/
@@ -89,12 +98,14 @@ After installation, skills are available as `/backlog-toolkit:init`, `/backlog-t
 
 ## Setup (Recommended Path)
 
-1. Install the plugin (or local skills):
+1. Install the plugin:
 
 ```bash
+# Via marketplace (recommended):
+/plugin marketplace add fjbelchi/backlog-agents
+/plugin install backlog-toolkit@backlog-agents
+# OR via local clone:
 /plugin install --path /path/to/backlog-agents
-# OR
-./install.sh --local --force
 ```
 
 2. Initialize backlog in your target project:

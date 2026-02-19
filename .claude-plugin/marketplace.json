@@ -1,0 +1,22 @@
+{
+  "name": "backlog-agents",
+  "owner": {
+    "name": "Fernando Belchi",
+    "url": "https://github.com/fjbelchi"
+  },
+  "metadata": {
+    "description": "Backlog management toolkit for Claude Code — ticket creation, refinement, implementation with Agent Teams, and automated code review.",
+    "version": "2.0.0"
+  },
+  "plugins": [
+    {
+      "name": "backlog-toolkit",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/fjbelchi/backlog-agents.git"
+      },
+      "description": "Stack-agnostic backlog management: init, ticket, refinement, implementer, sentinel. Includes cost estimation, Agent Teams orchestration, and quality gates.",
+      "version": "2.0.0"
+    }
+  ]
+}
