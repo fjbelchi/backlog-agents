@@ -1,0 +1,94 @@
+import pytest
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts", "rag"))
+import server
+
+server.app.config["TESTING"] = True
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    monkeypatch.setattr(server, "BASE_PATH", str(tmp_path))
+    server._clients.clear()
+    server._collections.clear()
+    with server.app.test_client() as c:
+        yield c
+
+
+def test_project_isolation(client):
+    client.post("/index", json={
+        "project": "alpha",
+        "documents": ["def login(): pass"],
+        "ids": ["alpha::auth.py::0"],
+        "metadatas": [{"type": "code", "file": "auth.py"}]
+    })
+    client.post("/index", json={
+        "project": "beta",
+        "documents": ["def checkout(): pass"],
+        "ids": ["beta::shop.py::0"],
+        "metadatas": [{"type": "code", "file": "shop.py"}]
+    })
+    r = client.post("/search", json={"project": "alpha", "query": "login", "n_results": 5})
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "results" in data
+    assert data.get("project") == "alpha"
+    docs = data["results"]["documents"][0]
+    assert any("login" in d for d in docs)
+    assert not any("checkout" in d for d in docs)
+
+
+def test_upsert_is_idempotent(client):
+    for _ in range(3):
+        r = client.post("/index", json={
+            "project": "idem",
+            "documents": ["def foo(): pass"],
+            "ids": ["idem::foo.py::0"],
+            "metadatas": [{"type": "code"}]
+        })
+        assert r.status_code == 200
+    # After 3 upserts of same ID there should only be 1 document
+    r = client.post("/search", json={"project": "idem", "query": "foo", "n_results": 10})
+    assert r.status_code == 200
+    docs = r.get_json()["results"]["documents"][0]
+    assert len(docs) == 1
+
+
+def test_stats_endpoint_does_not_error(client):
+    # Stats for default project — just verify no 500 error
+    r = client.get("/stats")
+    assert r.status_code == 200
+
+
+def test_health_endpoint(client):
+    r = client.get("/health")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["status"] == "healthy"
+
+
+def test_index_returns_project_in_response(client):
+    r = client.post("/index", json={
+        "project": "myproj",
+        "documents": ["def bar(): pass"],
+        "ids": ["myproj::bar.py::0"],
+        "metadatas": [{"type": "code"}]
+    })
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["indexed"] == 1
+    assert data["project"] == "myproj"
+
+
+def test_search_requires_query(client):
+    r = client.post("/search", json={"project": "alpha"})
+    assert r.status_code == 400
+    assert "error" in r.get_json()
+
+
+def test_index_requires_documents(client):
+    r = client.post("/index", json={"project": "alpha", "documents": []})
+    assert r.status_code == 400
+    assert "error" in r.get_json()
