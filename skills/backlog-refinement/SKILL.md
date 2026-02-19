@@ -154,6 +154,20 @@ FOR EACH other pending ticket:
 | Issue persists | The problem described still exists in the code | Move to completed/ if resolved |
 | Solution feasible | The proposed remediation is technically correct | Correct solution or flag for review |
 
+#### RAG-Assisted Reference Check (if enabled)
+
+If `llmOps.ragPolicy.enabled` and RAG server is reachable, supplement the file-existence check by querying the RAG index for function and class names mentioned in each ticket:
+
+```python
+# For each symbol name extracted from ticket affectedFiles and description:
+rag = RagClient()
+results = rag.search(symbol_name, n=3, filter={"type": "code"})
+if not results.get("documents", [[]])[0]:
+    flag_ticket(ticket_id, f"Code reference '{symbol_name}' not found in RAG index")
+```
+
+This is faster than grepping the full codebase and respects project isolation — it only searches the current project's index.
+
 ### 2.2 Completeness (High)
 
 | Check | What to verify | Action if fails |

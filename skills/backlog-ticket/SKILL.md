@@ -34,6 +34,21 @@ If the file is not found, stop immediately and tell the user:
 
 > "No backlog.config.json found. Run /backlog-init first to set up the backlog system."
 
+### 1.1b RAG Context Enrichment (if enabled)
+
+If `llmOps.ragPolicy.enabled` is `true` and the RAG server is reachable (`GET {ragPolicy.serverUrl}/health` returns 200):
+
+Query RAG with the ticket description before filling template sections:
+```python
+# Pseudo-code — adapt to the actual implementation context
+rag = RagClient()
+snippets = rag.search(ticket_description, n=5)
+# Use returned file paths to pre-fill affectedFiles (avoids hallucinated paths)
+# Use returned snippets to enrich the context section with real code references
+```
+
+If RAG is unreachable, skip enrichment and proceed with direct file reads.
+
 ### 1.2 Scan Existing Backlog
 
 Read all `.md` files in `{dataDir}/pending/` using Glob.
@@ -428,6 +443,14 @@ PRIORITY ALIGNMENT:
 ### All 6 Checks Pass
 
 Write the ticket to `{dataDir}/pending/{PREFIX}-{NNN}-{slug}.md` where `{slug}` is the title in kebab-case, truncated to 50 characters.
+
+### Post-Save: Index Ticket in RAG
+
+If `llmOps.ragPolicy.enabled` and RAG is reachable:
+```python
+rag.upsert_file(ticket_path, type="ticket")
+```
+This makes the ticket searchable for sentinel deduplication and implementer recurring-pattern memory.
 
 Print a summary:
 
