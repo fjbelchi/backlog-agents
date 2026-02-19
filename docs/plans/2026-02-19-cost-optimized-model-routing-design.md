@@ -1,6 +1,6 @@
 # Cost-Optimized Model Routing Design
 
-**Status**: Approved
+**Status**: Implemented
 **Date**: 2026-02-19
 **Goal**: Reduce per-ticket implementation cost by 33–51% by routing development tasks to Ollama/Haiku and reserving Sonnet exclusively for code review.
 
