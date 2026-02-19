@@ -77,6 +77,19 @@ def check_long_functions(files: list[str], max_lines: int) -> list[dict]:
                         })
                     in_func, func_start = True, i
                     func_name = line.strip()[:60]
+            # Check last function in file (no subsequent header to trigger the check)
+            if in_func and (len(lines) + 1 - func_start) > max_lines:
+                findings.append({
+                    "category": "techDebt",
+                    "severity": "low",
+                    "file": fpath,
+                    "line": func_start,
+                    "description": (
+                        f"Long function '{func_name}' "
+                        f"({len(lines) + 1 - func_start} lines > {max_lines})"
+                    ),
+                    "source": "prescan",
+                })
         except Exception:
             pass
     return findings

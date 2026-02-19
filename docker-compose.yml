@@ -1,0 +1,148 @@
+# ─── Backlog Toolkit Infrastructure ──────────────────────────────────
+# Phase 1: postgres, litellm, rag (always started)
+# Phase 2: memgraph, memgraph-lab (start with --profile phase2)
+#
+# Usage:
+#   docker compose --env-file .env.docker.local up -d
+#   docker compose --env-file .env.docker.local --profile phase2 up -d
+#
+# Docs: docs/reference/docker-infrastructure.md
+
+services:
+  # ─── PostgreSQL (LiteLLM persistence) ──────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: backlog-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-litellm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-litellm_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-litellm}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-litellm}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ─── LiteLLM Proxy ────────────────────────────────────────────────
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: backlog-litellm
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://litellm:litellm_pass@postgres:5432/litellm}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-litellm-changeme}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-sk-salt-changeme}
+      # AWS credentials resolved at runtime by start-services.sh
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      # Store model info and spend logs in DB (required for prompt logging in UI)
+      STORE_MODEL_IN_DB: "True"
+      # SSL verification disabled — corporate TLS inspection (Zscaler) uses a CA cert
+      # that Python 3.13 rejects (Basic Constraints not marked critical per RFC 5280).
+      SSL_VERIFY: "False"
+      CURL_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+    ports:
+      - "8000:4000"
+    volumes:
+      - ./config/litellm/proxy-config.docker.yaml:/app/config.yaml:ro
+      - ./docker/certs/ca-bundle.crt:/etc/ssl/certs/ca-certificates.crt:ro
+    command: ["--config", "/app/config.yaml", "--detailed_debug"]
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/readiness')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # ─── RAG Server (code search) ─────────────────────────────────────
+  rag:
+    build:
+      context: .
+      dockerfile: docker/rag/Dockerfile
+    container_name: backlog-rag
+    environment:
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+    ports:
+      - "8001:8001"
+    volumes:
+      - chromadata:/data/chroma
+      - ~/.cache/huggingface:/root/.cache/huggingface:cached
+      - ./docker/certs/ca-bundle.crt:/etc/ssl/certs/ca-certificates.crt:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ─── Redis (LiteLLM semantic cache) ──────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: backlog-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ─── Memgraph (Phase 2: code graph analysis) ──────────────────────
+  memgraph:
+    image: memgraph/memgraph-mage
+    container_name: backlog-memgraph
+    profiles:
+      - phase2
+    ports:
+      - "7687:7687"
+      - "7444:7444"
+    volumes:
+      - memgraphdata:/var/lib/memgraph
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'RETURN 1;' | mgconsole --host localhost --port 7687 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ─── Memgraph Lab (Phase 2: graph visualization) ──────────────────
+  memgraph-lab:
+    image: memgraph/lab
+    container_name: backlog-memgraph-lab
+    profiles:
+      - phase2
+    depends_on:
+      memgraph:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      QUICK_CONNECT_MG_HOST: memgraph
+      QUICK_CONNECT_MG_PORT: 7687
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  chromadata:
+  memgraphdata:
+  redisdata:

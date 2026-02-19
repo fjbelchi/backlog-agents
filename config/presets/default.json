@@ -164,7 +164,7 @@
       "escalateToHardGate": 5
     },
     "ticketMapping": {
-      "security": "SEC",
+      "security": "BUG",
       "bug": "BUG",
       "techDebt": "TASK",
       "architecture": "TASK"

@@ -35,8 +35,68 @@ All project-specific values come from `backlog.config.json` at project root.
 | Agent LLM override | `agentRouting.llmOverride` | `true` |
 | Review pipeline | `reviewPipeline.reviewers` | 2 reviewers (spec + quality) |
 | Confidence threshold | `reviewPipeline.confidenceThreshold` | 80 |
+| Default gen model | `llmOps.routing.entryModelImplement` | `balanced` |
+| Escalation rules | `llmOps.routing.escalationRules` | `[]` |
+| Review model | `llmOps.routing.entryModelReview` | `cheap` |
+| Lint model | `llmOps.routing.entryModelReview` | `cheap` |
+| Batch policy | `llmOps.batchPolicy` | `{forceBatchWhenQueueOver: 1}` |
+| RAG enabled | `llmOps.ragPolicy.enabled` | `false` |
+| RAG server URL | `llmOps.ragPolicy.serverUrl` | `http://localhost:8001` |
 
 **At startup**: Read `backlog.config.json`. If `codeRules.source` is set, read that file — its full content is included in every implementer prompt.
+
+---
+
+## Cost-Aware Execution
+
+### Batch Mode (Default)
+
+Unless the user passes `--now`, default to **batch mode** for all epic-level work:
+
+```
+/backlog-toolkit:implement EPIC-001 EPIC-002   → batch mode (50% cost reduction)
+/backlog-toolkit:implement --now FEAT-001       → synchronous (immediate result)
+```
+
+Check `config.llmOps.batchPolicy.forceBatchWhenQueueOver` (default: 1). If the number of tickets >= this threshold and `--now` was NOT passed, submit via `scripts/ops/batch_submit.py` and exit with instructions to run `batch_reconcile.py` when ready.
+
+### Model Tier Routing Per Gate
+
+Before each LLM call, select the model tier using escalation rules:
+
+```
+1. Check ticket tags: ARCH or SECURITY tag → "frontier"
+2. Check gate fail count: qualityGateFails >= 2 → "frontier"
+3. Check ticket.complexity == "high" → "frontier"
+4. Use gate default:
+   Gate 1 PLAN      → config.llmOps.routing.entryModelDraft     (default: "balanced")
+   Gate 2 IMPLEMENT → config.llmOps.routing.entryModelImplement  (default: "balanced")
+   Gate 3 LINT      → config.llmOps.routing.entryModelReview     (default: "cheap")
+   Gate 4 REVIEW    → config.llmOps.routing.entryModelReview     (default: "cheap")
+   Gate 5 COMMIT    → always "cheap"
+```
+
+Model aliases resolve via LiteLLM config: `cheap` → Haiku, `balanced` → Sonnet, `frontier` → Opus.
+
+### RAG Context Compression
+
+If `config.llmOps.ragPolicy.enabled` is true, query the RAG server **before** loading files manually:
+
+```
+GET config.llmOps.ragPolicy.serverUrl/search
+Body: {"query": "{ticket.description}", "n_results": config.llmOps.ragPolicy.topK}
+→ Returns top-K code snippets (~800 tokens vs ~3k full files)
+→ Include snippets in prompt INSTEAD OF full file reads where possible
+```
+
+If RAG server is unreachable, fall back to direct file reads without error.
+
+### Cost Ledger
+
+After each gate, append to `.backlog-ops/usage-ledger.jsonl`:
+```json
+{"ticket_id": "FEAT-001", "gate": "implement", "model": "balanced", "input_tokens": 1200, "output_tokens": 800, "date": "2026-02-19"}
+```
 
 ---
 
@@ -100,6 +160,10 @@ PHASE 0: STARTUP
   codeRules = config.codeRules.source ? read(config.codeRules.source) : ""
   state = load(".claude/implementer-state.json") || create_v4_state()
   pending = count({config.backlog.dataDir}/pending/*.md)
+  nowMode = args.includes("--now")
+  if not nowMode and pending >= config.llmOps.batchPolicy.forceBatchWhenQueueOver:
+    batch_submit(pending_tickets); show_batch_instructions(); EXIT
+  ragAvailable = config.llmOps.ragPolicy.enabled && check_rag_health(config.llmOps.ragPolicy.serverUrl)
   if config.qualityGates.healthCheckCommand: run it
   show_banner(pending, state.stats)
 
@@ -246,11 +310,15 @@ Spawn teammates via Task tool (NO model: parameter):
 
 ### Gate 1: PLAN
 
+**Model**: apply escalation rules (see Cost-Aware Execution). Default: `entryModelDraft` (balanced).
+**RAG**: if ragAvailable, query RAG with ticket description first; use returned snippets instead of full file reads.
+
 Implementer receives ticket and MUST:
 1. Read ticket .md completely
-2. Read affected files
+2. If ragAvailable: query RAG → use top-K snippets for context; else read affected files directly
 3. Write plan in ticket under `## Implementation Plan`
 4. If unclear → message leader: "needs-investigation"
+5. Log gate cost to usage-ledger.jsonl
 
 ### Catalog Injection
 
@@ -269,6 +337,8 @@ The leader reads the relevant catalog files from `catalog/` directory and includ
 If an external skill was detected in Phase 0.5 for the same discipline, prefer the external skill instructions.
 
 ### Gate 2: IMPLEMENT (TDD)
+
+**Model**: apply escalation rules. Default: `entryModelImplement` (balanced). Escalate to frontier if ARCH/SECURITY tag or qualityGateFails >= 2.
 
 | Type | Coverage | Minimum |
 |------|----------|---------|
@@ -294,6 +364,8 @@ If `codeRules.source` is not configured, skip code rules injection but still enf
 
 ### Gate 3: LINT GATE
 
+**Model**: `entryModelReview` (cheap). Lint execution is deterministic (run actual tools); LLM only analyzes results.
+
 Run configured commands on affected files:
 
 ```bash
@@ -312,6 +384,8 @@ Run configured commands on affected files:
 - If 3 failures: ticket marked `lint-blocked`, skip to next wave
 
 ### Gate 4: REVIEW (Configurable Pipeline)
+
+**Model**: `entryModelReview` (cheap) for first round; escalate to balanced after 1st failure, frontier after 2nd.
 
 Read reviewers from `config.reviewPipeline.reviewers`. Default: 2 reviewers.
 

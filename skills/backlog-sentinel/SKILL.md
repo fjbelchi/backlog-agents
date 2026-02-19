@@ -28,9 +28,9 @@ Reads from `backlog.config.json` at project root.
 | Security reviewer | `sentinel.reviewers.security` | `true` |
 | Quality reviewer | `sentinel.reviewers.quality` | `true` |
 | RAG deduplication | `sentinel.ragDeduplication` | `true` |
-| Ticket mapping | `sentinel.ticketMapping` | `{security:SEC, bug:BUG, techDebt:TASK}` |
+| Ticket mapping | `sentinel.ticketMapping` | `{security:BUG, bug:BUG, techDebt:TASK}` |
 | Pattern thresholds | `sentinel.patternThresholds` | `{soft: 3, hard: 5}` |
-| Default gen model | `llmOps.routing.defaultGenerationModel` | `balanced` |
+| Default gen model | `llmOps.routing.entryModelImplement` | `balanced` |
 | RAG server | `llmOps.ragPolicy.serverUrl` | `http://localhost:8001` |
 
 ---

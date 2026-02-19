@@ -299,7 +299,7 @@
             "baseURL": {
               "type": "string",
               "description": "LiteLLM proxy base URL.",
-              "default": "http://localhost:4000"
+              "default": "http://localhost:8000"
             },
             "apiKeyEnv": {
               "type": "string",
@@ -454,7 +454,7 @@
               "type": "array",
               "description": "Workflow phases eligible for batch execution.",
               "items": { "type": "string" },
-              "default": ["refinement", "bulk-ticket-validation", "cost-report", "duplicate-detection"]
+              "default": ["refinement", "bulk-ticket-validation", "cost-report", "duplicate-detection", "implementation"]
             },
             "forceBatchWhenQueueOver": {
               "type": "integer",
@@ -520,6 +520,11 @@
               "type": "string",
               "description": "Command to rebuild the RAG index.",
               "default": "python scripts/ops/rag_index.py --rebuild"
+            },
+            "serverUrl": {
+              "type": "string",
+              "description": "URL of the RAG HTTP server (used by sentinel and implementer for context retrieval).",
+              "default": "http://localhost:8001"
             }
           }
         }
