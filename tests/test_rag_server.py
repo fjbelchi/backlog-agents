@@ -124,3 +124,12 @@ def test_project_stats(client):
     data = r.get_json()
     assert data["name"] == "stat-proj"
     assert data["count"] == 1
+
+
+def test_ui_endpoint(client):
+    r = client.get("/ui")
+    assert r.status_code == 200
+    html = r.data.decode()
+    assert "<form" in html
+    assert "<table" in html
+    assert "project" in html

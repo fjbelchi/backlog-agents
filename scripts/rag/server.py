@@ -227,6 +227,52 @@ def stats():
         return jsonify({"error": str(e)}), 500
 
 
+UI_HTML = """<!DOCTYPE html>
+<html><head><title>RAG UI</title>
+<style>body{font-family:monospace;padding:20px;max-width:900px}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}
+th{background:#f5f5f5}.result{background:#f9f9f9;padding:8px;margin:4px 0;border-left:3px solid #666}
+input{margin:0 4px;padding:4px}button{padding:4px 12px}</style>
+</head><body>
+<h2>RAG Server</h2>
+<h3>Projects</h3>
+<div id="projects">Loading...</div>
+<h3>Search</h3>
+<form id="sf">
+  Project: <input id="proj" placeholder="project-name" size="20">
+  Query: <input id="q" size="40" placeholder="authentication logic">
+  N: <input id="n" value="5" size="3">
+  <button type="submit">Search</button>
+</form>
+<div id="results"></div>
+<script>
+fetch('/projects').then(r=>r.json()).then(d=>{
+  const rows=d.projects.map(p=>`<tr><td>${p.name}</td><td>${p.code_count}</td><td>${p.ticket_count}</td><td>${p.count}</td></tr>`).join('');
+  document.getElementById('projects').innerHTML=`<table><tr><th>Project</th><th>Code</th><th>Tickets</th><th>Total</th></tr>${rows||'<tr><td colspan=4>No projects indexed yet</td></tr>'}</table>`;
+});
+document.getElementById('sf').addEventListener('submit',e=>{
+  e.preventDefault();
+  fetch('/search',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({project:document.getElementById('proj').value||'default',
+      query:document.getElementById('q').value,n_results:parseInt(document.getElementById('n').value)||5})
+  }).then(r=>r.json()).then(d=>{
+    const docs=(d.results&&d.results.documents&&d.results.documents[0])||[];
+    const metas=(d.results&&d.results.metadatas&&d.results.metadatas[0])||[];
+    document.getElementById('results').innerHTML=docs.length?docs.map((doc,i)=>
+      `<div class="result"><b>${(metas[i]||{}).file||''}</b> [${(metas[i]||{}).type||''}]<pre>${doc.replace(/</g,'&lt;').slice(0,400)}</pre></div>`
+    ).join(''):'<p>No results</p>';
+  });
+});
+</script></body></html>"""
+
+
+@app.route('/ui', methods=['GET'])
+def ui():
+    """Serve a minimal HTML dashboard for browsing projects and running searches."""
+    return UI_HTML, 200, {'Content-Type': 'text/html; charset=utf-8'}
+
+
 def main():
     parser = argparse.ArgumentParser(description="RAG Server for Backlog Toolkit")
     parser.add_argument('--port', type=int, default=8001, help='Port to run on')
