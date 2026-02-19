@@ -10,15 +10,16 @@ Initialize a backlog system in the current project. This skill detects the proje
 
 ## Step 1: Detect Project Context
 
-Use Glob and Read to detect the project:
+Use **deterministic file checks** (no LLM calls) to detect the project stack:
 
-1. Check for manifest files to detect stack:
-   - `package.json` -> typescript
-   - `pyproject.toml` or `setup.py` or `requirements.txt` -> python
-   - `go.mod` -> go
-   - `Cargo.toml` -> rust
-   - `Package.swift` -> swift
-   - Otherwise -> generic
+1. Check for manifest files to detect stack (first match wins):
+   - `package.json` + `tsconfig.json` → `typescript`
+   - `package.json` (no tsconfig) → `javascript`
+   - `pyproject.toml` or `setup.py` or `requirements.txt` → `python`
+   - `go.mod` → `go`
+   - `Cargo.toml` → `rust`
+   - `Package.swift` → `swift`
+   - Otherwise → `generic`
 
 2. Try to extract the project name from the manifest (e.g., `name` field in `package.json`). Fall back to the current directory name via `basename $(pwd)`.
 
@@ -104,6 +105,64 @@ The config structure must be:
     "requireDependencyCheck": true,
     "minAcceptanceCriteria": 3,
     "requireVerificationCommands": true
+  },
+  "llmOps": {
+    "gateway": {
+      "baseURL": "http://localhost:8000"
+    },
+    "routing": {
+      "defaultGenerationModel": "balanced",
+      "planningModel": "balanced",
+      "reviewModel": "cheap",
+      "lintModel": "cheap",
+      "escalationRules": [
+        { "condition": "ticket.tags.includes('ARCH')", "model": "frontier" },
+        { "condition": "ticket.tags.includes('SECURITY')", "model": "frontier" },
+        { "condition": "qualityGateFails >= 2", "model": "frontier" }
+      ]
+    },
+    "batchPolicy": {
+      "enabled": true,
+      "forceBatchWhenQueueOver": 1,
+      "maxWaitHours": 24,
+      "eligiblePhases": ["ticket", "refinement", "implementation"]
+    },
+    "ragPolicy": {
+      "enabled": true,
+      "serverUrl": "http://localhost:8001",
+      "vectorStore": "chromadb",
+      "topK": 5,
+      "embeddingModel": "all-MiniLM-L6-v2"
+    },
+    "cachePolicy": {
+      "redisEnabled": true,
+      "redisUrl": "redis://localhost:6379",
+      "ttlSeconds": 3600
+    }
+  },
+  "sentinel": {
+    "enabled": true,
+    "installGitHook": true,
+    "prescan": {
+      "runLinter": true,
+      "runTests": true,
+      "detectHardcoded": true,
+      "maxFunctionLines": 80
+    },
+    "reviewers": {
+      "security": true,
+      "quality": true
+    },
+    "ragDeduplication": true,
+    "ticketMapping": {
+      "security": "SEC",
+      "bug": "BUG",
+      "techDebt": "TASK"
+    },
+    "patternThresholds": {
+      "escalateToSoftGate": 3,
+      "escalateToHardGate": 5
+    }
   }
 }
 ```
@@ -505,9 +564,11 @@ Created:
 
 Ticket prefixes enabled: TASK, BUG, FEAT, IDEA
 Quality gates configured for: <STACK>
+Sentinel: enabled (pre-push hook will auto-install on first /backlog-toolkit:sentinel run)
 
 Next steps:
   1. Review backlog.config.json and adjust quality gate commands
   2. Add rules to .claude/code-rules.md
   3. Create your first ticket with /backlog-ticket
+  4. Run /backlog-toolkit:sentinel after your first commit to activate code review
 ```
