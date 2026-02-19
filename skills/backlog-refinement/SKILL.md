@@ -188,7 +188,73 @@ This is faster than grepping the full codebase and respects project isolation â€
 | Correct prefix | Ticket type/prefix matches the nature of the issue | Reclassify if needed |
 | Not a duplicate | No other ticket covers the same issue | Mark as DUP, reference original |
 | Not obsolete | The code/feature still exists | Move to completed/ |
-| Effort estimated | Has an effort estimation | Add estimation |
+| Effort estimated | Has a `## Cost Estimate` section with token counts and USD costs | Run cost estimation (see 2.4) |
+
+### 2.4 Cost Estimation
+
+For any ticket missing a `## Cost Estimate` section, compute and add it.
+
+#### Step 1: Count scope from ticket
+
+From the ticket's Affected Files table and Test Strategy:
+- `files_to_modify` = rows with existing files
+- `files_to_create` = rows with new files
+- `test_count` = number of test cases in Test Strategy
+
+#### Step 2: Estimate tokens
+
+Read `.claude/cost-history.json` if it exists (written by implementer after each ticket).
+
+**With history** (use averages from matching ticket type):
+```
+input_tokens  = (files_to_modify * avg.input_tokens_per_file_modified)
+              + (files_to_create * avg.input_tokens_per_file_created)
+output_tokens = (files_to_modify * avg.output_tokens_per_file_modified)
+              + (files_to_create * avg.output_tokens_per_file_created)
+              + (test_count * avg.output_tokens_per_test)
+total_tokens  = (input_tokens + output_tokens) * avg.overhead_multiplier
+```
+
+**Without history** (defaults):
+```
+input_tokens  = (files_to_modify * 8000) + (files_to_create * 3000)
+output_tokens = (files_to_modify * 2500) + (files_to_create * 4000) + (test_count * 1200)
+total_tokens  = (input_tokens + output_tokens) * 2.5
+```
+
+Split: ~60% input, ~40% output.
+
+#### Step 3: Calculate cost
+
+| Model | Input $/1M | Output $/1M |
+|-------|-----------|------------|
+| Claude Opus 4 | $15.00 | $75.00 |
+| Claude Sonnet 4 | $3.00 | $15.00 |
+| Claude Haiku 3.5 | $0.80 | $4.00 |
+
+```
+cost = (input_tokens / 1_000_000 * input_price) + (output_tokens / 1_000_000 * output_price)
+```
+
+#### Step 4: Add section to ticket
+
+Insert after `## Dependencies`:
+
+```markdown
+## Cost Estimate
+
+| Model | Input Tokens | Output Tokens | Est. Cost |
+|-------|-------------|---------------|-----------|
+| Opus 4 | ~{input} | ~{output} | ${cost} |
+| Sonnet 4 | ~{input} | ~{output} | ${cost} |
+| Haiku 3.5 | ~{input} | ~{output} | ${cost} |
+
+**Basis**: {N} files to modify, {M} files to create, {K} tests defined
+**Estimation source**: {historical (N samples) | default heuristics}
+**Confidence**: {high (>10 samples) | medium (3-10) | low (<3 or defaults)}
+```
+
+Round token counts to nearest 1000. Round costs to 2 decimal places.
 
 ---
 
