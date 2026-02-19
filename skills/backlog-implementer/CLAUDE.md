@@ -7,6 +7,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #8306 | 8:39 PM | 🔵 | Model Tier Routing Strategy in Backlog Implementer | ~327 |
 | #8269 | 7:51 PM | 🟣 | Implementer Skill Updated with Write-Agent Pattern | ~296 |
 | #8268 | " | 🔄 | Implementer Skill Refactored for Delegated Wave Planning | ~312 |
 | #8266 | " | 🟣 | Implementer Skill Updated with Write-Agent Pattern | ~326 |

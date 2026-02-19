@@ -108,6 +108,10 @@ claude --plugin-dir /path/to/backlog-agents
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #8303 | 8:06 PM | ✅ | Version Bumped to 2.0.6 | ~230 |
+| #8302 | " | 🔵 | Marketplace Configuration for Plugin Distribution | ~252 |
+| #8301 | " | ✅ | Plugin Configuration Updated to v2.0.5 | ~300 |
+| #8300 | " | ✅ | Plugin Version Bumped to 2.0.6 | ~177 |
 | #8119 | 6:26 PM | 🟣 | Version 2.0.5 Released with RAG Client Fix | ~281 |
 | #8098 | 6:19 PM | 🔴 | Version 2.0.4 Released with Implementer Fix | ~232 |
 | #8088 | 6:16 PM | ✅ | Release Version 2.0.3 with Path Fixes | ~256 |
