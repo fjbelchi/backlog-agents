@@ -104,10 +104,13 @@ def search():
             return jsonify({"query": query, "project": project, "results": {"documents": [[]], "metadatas": [[]], "ids": [[]], "distances": [[]]}})
 
         safe_n = min(n_results, count)
-        results = col.query(
-            query_embeddings=[query_embedding],
-            n_results=safe_n
-        )
+        query_kwargs = {
+            "query_embeddings": [query_embedding],
+            "n_results": safe_n,
+        }
+        if data.get("filter"):
+            query_kwargs["where"] = data["filter"]
+        results = col.query(**query_kwargs)
 
         return jsonify({
             "query": query,

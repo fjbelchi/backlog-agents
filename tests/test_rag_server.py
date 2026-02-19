@@ -133,3 +133,23 @@ def test_ui_endpoint(client):
     assert "<form" in html
     assert "<table" in html
     assert "project" in html
+
+
+def test_search_filter_by_type(client):
+    client.post("/index", json={
+        "project": "filter-test",
+        "documents": ["def login(): pass", "## BUG-001 Auth ticket content"],
+        "ids": ["filter-test::auth.py::0", "filter-test::BUG-001.md::0"],
+        "metadatas": [{"type": "code"}, {"type": "ticket"}]
+    })
+    r = client.post("/search", json={
+        "project": "filter-test",
+        "query": "login",
+        "n_results": 5,
+        "filter": {"type": "code"}
+    })
+    assert r.status_code == 200
+    docs = r.get_json()["results"]["documents"][0]
+    # Should return code doc, not the ticket
+    assert len(docs) >= 1
+    assert all("def login" in d or "pass" in d for d in docs)
