@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "project": {
     "name": "my-project",
     "stack": "generic"
@@ -70,5 +70,104 @@
     ],
     "confidenceThreshold": 80,
     "maxReviewRounds": 3
+  },
+  "llmOps": {
+    "registry": {
+      "source": ".backlog-ops/model-registry.json",
+      "refreshCommand": "bash scripts/ops/sync-model-registry.sh",
+      "strictMode": true
+    },
+    "gateway": {
+      "baseURL": "http://localhost:8000",
+      "apiKeyEnv": "LITELLM_MASTER_KEY",
+      "requireEscalationReason": true
+    },
+    "routing": {
+      "entryModelClassify": "cheap",
+      "entryModelDraft": "cheap",
+      "entryModelImplement": "balanced",
+      "entryModelReview": "cheap",
+      "escalationModel": "frontier",
+      "maxEscalationsPerTicket": 1
+    },
+    "tokenPolicy": {
+      "maxInputByPhase": {
+        "classify": 4000,
+        "draft": 8000,
+        "implement": 32000,
+        "review": 16000,
+        "refine": 12000
+      },
+      "maxOutputByPhase": {
+        "classify": 1000,
+        "draft": 4000,
+        "implement": 16000,
+        "review": 4000,
+        "refine": 8000
+      },
+      "contextWindowStrategy": "summarize"
+    },
+    "cachePolicy": {
+      "providerPromptCaching": true,
+      "stablePrefixMinTokens": 2048,
+      "responseCache": {
+        "enabled": true,
+        "ttlSeconds": 3600,
+        "backend": "redis"
+      },
+      "semanticCache": {
+        "enabled": false,
+        "backend": "qdrant",
+        "threshold": 0.88
+      }
+    },
+    "batchPolicy": {
+      "enabled": true,
+      "eligiblePhases": ["refinement", "bulk-ticket-validation", "cost-report", "duplicate-detection", "implementation"],
+      "forceBatchWhenQueueOver": 1,
+      "maxConcurrentBatchJobs": 10,
+      "retryPolicy": {
+        "maxRetries": 3,
+        "backoffMultiplier": 2.0
+      }
+    },
+    "ragPolicy": {
+      "enabled": true,
+      "embeddingModel": "all-MiniLM-L6-v2",
+      "vectorStore": "chromadb",
+      "indexPath": ".backlog-ops/rag-index",
+      "serverUrl": "http://localhost:8001",
+      "chunkSize": 512,
+      "topK": 5,
+      "reindexCommand": "python scripts/ops/rag_index.py --rebuild"
+    }
+  },
+  "sentinel": {
+    "enabled": true,
+    "installGitHook": true,
+    "prescan": {
+      "runLinter": true,
+      "runTests": true,
+      "runTypeCheck": true,
+      "detectHardcoded": true,
+      "detectTodos": true,
+      "maxFunctionLines": 80
+    },
+    "reviewers": {
+      "security": true,
+      "quality": true
+    },
+    "ragDeduplication": true,
+    "patternThresholds": {
+      "recurring": 2,
+      "escalateToSoftGate": 3,
+      "escalateToHardGate": 5
+    },
+    "ticketMapping": {
+      "security": "SEC",
+      "bug": "BUG",
+      "techDebt": "TASK",
+      "architecture": "TASK"
+    }
   }
 }
