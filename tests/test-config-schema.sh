@@ -278,6 +278,26 @@ done
 
 echo ""
 
+# ── llmOps.routing sub-keys ──────────────────────────────────────────
+
+echo "-- llmOps.routing sub-keys --"
+
+ROUTING_KEYS=(entryModelClassify entryModelPlan entryModelDraft entryModelImplement entryModelReview escalationModel)
+
+for key in "${ROUTING_KEYS[@]}"; do
+  if python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert sys.argv[2] in d['llmOps']['routing']
+" "$PRESET" "$key" 2>/dev/null; then
+    pass "llmOps.routing.${key} present"
+  else
+    fail "llmOps.routing.${key} missing"
+  fi
+done
+
+echo ""
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
