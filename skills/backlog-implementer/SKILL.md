@@ -85,7 +85,36 @@ Before each LLM call, select the model tier using escalation rules:
    Gate 5 COMMIT    → always "cheap"
 ```
 
-Model aliases resolve via LiteLLM config: `cheap` → Haiku, `balanced` → Sonnet, `frontier` → Opus.
+Model aliases resolve via LiteLLM config: `free` → Ollama qwen3-coder, `cheap` → Haiku, `balanced` → Sonnet, `frontier` → Opus.
+
+### Local Model Routing (Junior Programmer Pattern)
+
+When Ollama is detected in Phase 0.5, simple tickets route through LiteLLM proxy `free` tier via `scripts/ops/llm_call.sh` instead of spawning Claude Code subagents.
+
+The leader calls `llm_call.sh --model free` for plan gates. Review always uses cloud (Sonnet/Haiku) — local never reviews itself.
+
+LOCAL-ELIGIBLE tickets (ALL must be true):
+  - complexity != "high"
+  - NO tags: ARCH, SECURITY
+  - affected_files <= 3
+  - NOT depends_on another ticket in this wave
+  - localModelStats.escalatedToCloud / totalAttempts < 0.30
+
+For LOCAL-ELIGIBLE tickets:
+  Gate 1 PLAN:      result=$(bash scripts/ops/llm_call.sh --model free --system "Write implementation plan" --file ticket.md)
+                    If empty or error → fallback to Task(model: "haiku") subagent
+  Gate 2 IMPLEMENT: Task() subagent (needs tool_use for edits). Use normal routing.
+  Gate 3 LINT:      → run locally (no LLM)
+  Gate 4 REVIEW:    → Task(model: "haiku") subagent — cloud reviews local output
+  Gate 5 COMMIT:    → always "cheap"
+
+ESCALATION: If Gate 3/4 fails twice on local-routed ticket:
+  1. stats.localModelStats.escalatedToCloud++
+  2. stats.localModelStats.failuresByType[gate]++
+  3. Re-route to Task(model: "sonnet") with full context
+  4. Message: "Local failed on {id} at {gate}. Escalated."
+
+Success: stats.localModelStats.successCount++, totalAttempts++
 
 ### RAG Context Compression
 
@@ -148,13 +177,13 @@ WHILE pending_tickets_exist(): cycle++
 
 ## Phase 0: Startup
 
-Read `backlog.config.json`, load `.claude/implementer-state.json`, count pending tickets in `{dataDir}/pending/*.md`, run health check if configured. If `state.version != "6.0"` or state missing, run: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/migrate-state.py"`
+Read `backlog.config.json`, load `.claude/implementer-state.json`, count pending tickets in `{dataDir}/pending/*.md`, run health check if configured. If `state.version != "6.1"` or state missing, run: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/migrate-state.py"`
 
 ---
 
 ## Phase 0.5: Detect Capabilities
 
-Scan `~/.claude/plugins/` for superpowers (TDD, debugging, verification, code-review) and stack-specific plugins (python: pg-aiguide, aws-skills; typescript: playwright-skill). Note any configured MCP servers. Log detected capabilities. When an external skill is available for a discipline, prefer it over the embedded catalog version.
+Scan `~/.claude/plugins/` for superpowers (TDD, debugging, verification, code-review) and stack-specific plugins (python: pg-aiguide, aws-skills; typescript: playwright-skill). Note any configured MCP servers. Log detected capabilities. When an external skill is available for a discipline, prefer it over the embedded catalog version. Also check Ollama: `bash scripts/ops/llm_call.sh --model free --user "Reply OK"`. If response received, set ollamaAvailable=true, log "Local model: free tier via Ollama".
 
 ---
 
@@ -399,9 +428,9 @@ Remaining: {pending_count} | Session total: ${session_total_cost_usd}
 
 ---
 
-## State Schema v6.0
+## State Schema v6.1
 
-State schema v6.0: see `.claude/implementer-state.json` (auto-created by `migrate-state.py`). Top-level keys: version, lastRunTimestamp, lastCycle, currentWave, stats (tickets/tests/commits/waves/cost/agentRouting/reviewStats), investigationQueue, failedTickets, lintBlockedTickets, completedThisSession.
+State schema v6.1: see `.claude/implementer-state.json` (auto-created by `migrate-state.py`). Top-level keys: version, lastRunTimestamp, lastCycle, currentWave, stats (tickets/tests/commits/waves/cost/agentRouting/reviewStats/localModelStats), investigationQueue, failedTickets, lintBlockedTickets, completedThisSession.
 
 ---
 
