@@ -118,11 +118,25 @@ For LOCAL-ELIGIBLE tickets:
   Gate 4 REVIEW:    → Task(model: "haiku") subagent — cloud reviews local output
   Gate 5 COMMIT:    → always "cheap"
 
-ESCALATION: If Gate 3/4 fails twice on local-routed ticket:
-  1. stats.localModelStats.escalatedToCloud++
-  2. stats.localModelStats.failuresByType[gate]++
-  3. Re-route to Task(model: "sonnet") with full context
-  4. Message: "Local failed on {id} at {gate}. Escalated."
+ESCALATION RULES:
+
+  Haiku IMPLEMENT fails Gate 3 (LINT) or Gate 4 (REVIEW) once:
+    1. stats.localModelStats.escalatedToCloud++
+    2. stats.localModelStats.failuresByType[gate]++
+    3. Re-run Gate 2 IMPLEMENT with Task(model: "sonnet") with full context
+    4. Message: "Haiku failed on {id} at {gate}. Escalated to Sonnet."
+
+  Ollama PLAN (Gate 1) returns empty or invalid JSON:
+    → Fallback to Task(model: "haiku") subagent
+    → No stats increment (expected fallback behavior)
+
+  Ollama COMMIT (Gate 5) returns empty:
+    → Use template: "{type}({area}): implement {ticket_id}"
+    → No stats increment (expected fallback behavior)
+
+  Ollama WAVE PLANNING returns invalid JSON:
+    → Fallback to Task(model: "haiku") subagent
+    → No stats increment (expected fallback behavior)
 
 Success: stats.localModelStats.successCount++, totalAttempts++
 
