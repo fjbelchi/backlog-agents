@@ -458,4 +458,4 @@ If MCP memory tools are not available, skip this step without error.
 
 **Run a complete refinement of the backlog. Verify each referenced file against the actual codebase. Document all changes in the report.**
 
-Read `backlog.config.json` at startup. If `llmOps.batchPolicy.enabled` is true and ticket count >= `llmOps.batchPolicy.forceBatchWhenQueueOver`, and `--now` was NOT passed, submit refinement as a batch job and exit with instructions to run `scripts/ops/batch_reconcile.py` when complete.
+Read `backlog.config.json` at startup. If `llmOps.batchPolicy.enabled` is true and ticket count >= `llmOps.batchPolicy.forceBatchWhenQueueOver`, and `--now` was NOT passed, submit refinement as a batch job via `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/ops/batch_submit.py"` and exit with instructions to run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/ops/batch_reconcile.py"` when complete. If the script is not found, proceed synchronously.

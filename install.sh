@@ -142,7 +142,10 @@ if [[ -d "$SCRIPTS_OPS_SRC" ]]; then
   mkdir -p "$SCRIPTS_OPS_DEST"
   cp "${SCRIPTS_OPS_SRC}/sentinel_prescan.py" "${SCRIPTS_OPS_DEST}/" 2>/dev/null || true
   cp "${SCRIPTS_OPS_SRC}/sentinel_patterns.py" "${SCRIPTS_OPS_DEST}/" 2>/dev/null || true
-  chmod +x "${SCRIPTS_OPS_DEST}/sentinel_prescan.py" "${SCRIPTS_OPS_DEST}/sentinel_patterns.py" 2>/dev/null || true
+  cp "${SCRIPTS_OPS_SRC}/batch_submit.py" "${SCRIPTS_OPS_DEST}/" 2>/dev/null || true
+  cp "${SCRIPTS_OPS_SRC}/batch_reconcile.py" "${SCRIPTS_OPS_DEST}/" 2>/dev/null || true
+  cp "${SCRIPTS_OPS_SRC}/cost_guard.py" "${SCRIPTS_OPS_DEST}/" 2>/dev/null || true
+  chmod +x "${SCRIPTS_OPS_DEST}"/*.py 2>/dev/null || true
 fi
 
 SCRIPTS_RAG_SRC="${SOURCE_DIR}/scripts/rag"

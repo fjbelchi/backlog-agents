@@ -58,7 +58,7 @@ Unless the user passes `--now`, default to **batch mode** for all epic-level wor
 /backlog-toolkit:implement --now FEAT-001       → synchronous (immediate result)
 ```
 
-Check `config.llmOps.batchPolicy.forceBatchWhenQueueOver` (default: 1). If the number of tickets >= this threshold and `--now` was NOT passed, submit via `scripts/ops/batch_submit.py` and exit with instructions to run `batch_reconcile.py` when ready.
+Check `config.llmOps.batchPolicy.forceBatchWhenQueueOver` (default: 1). If the number of tickets >= this threshold and `--now` was NOT passed, submit via `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/ops/batch_submit.py"` and exit with instructions to run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/ops/batch_reconcile.py"` when ready. If the script is not found at that path, proceed synchronously.
 
 ### Model Tier Routing Per Gate
 
