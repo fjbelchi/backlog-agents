@@ -11,10 +11,10 @@ check() {
     local name="$1" expected="$2" actual="$3"
     if echo "$actual" | grep -q "$expected"; then
         echo "  ✅ $name"
-        ((PASS++))
+        PASS=$((PASS + 1))
     else
         echo "  ❌ $name (expected: $expected, got: $actual)"
-        ((FAIL++))
+        FAIL=$((FAIL + 1))
     fi
 }
 

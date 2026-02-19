@@ -194,7 +194,7 @@ litellm_settings:
 
 # ─── Per-Model Budgets ──────────────────────────────────────────────
 model_max_budget:
-  free: 0                    # Local model, no cloud cost
+  # free: omitted — local model has $0 cost, no budget cap needed
   frontier: 300              # Hard cap on frontier spend
   balanced: 600
   cheap: 300

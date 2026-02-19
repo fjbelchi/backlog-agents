@@ -80,10 +80,10 @@ print(json.dumps(body))
 RESPONSE=$(curl -s -w "\n%{http_code}" "$BASE_URL/v1/chat/completions" \
     -H "Authorization: Bearer $API_KEY" \
     -H "Content-Type: application/json" \
-    -d "$BODY" 2>&1)
+    -d "$BODY" 2>/dev/null)
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-RESP_BODY=$(echo "$RESPONSE" | head -n -1)
+RESP_BODY=$(echo "$RESPONSE" | sed '$d')
 
 if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
     # Extract content from response
