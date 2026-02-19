@@ -13,7 +13,8 @@
       "name": "backlog-toolkit",
       "source": {
         "source": "url",
-        "url": "https://github.com/fjbelchi/backlog-agents.git"
+        "url": "https://github.com/fjbelchi/backlog-agents.git",
+        "ref": "v2.0.0"
       },
       "description": "Stack-agnostic backlog management: init, ticket, refinement, implementer, sentinel. Includes cost estimation, Agent Teams orchestration, and quality gates.",
       "version": "2.0.0"
