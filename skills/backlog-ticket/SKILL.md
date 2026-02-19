@@ -72,7 +72,27 @@ If the request is ambiguous or missing critical information, ask the user using 
 
 Do NOT ask about information you can infer from the codebase or the user's description.
 
-### 1.4 Analyze Codebase Context
+### 1.4 Auto-Tag Ticket
+
+Before codebase analysis, scan the user's description for keywords that require specific model routing:
+
+```
+ARCH tags (→ frontier model):
+  keywords: "architecture", "refactor", "migrate", "redesign", "schema change",
+            "breaking change", "api contract", "data model"
+
+SECURITY tags (→ frontier model):
+  keywords: "auth", "authentication", "authorization", "permission", "token",
+            "secret", "encrypt", "xss", "injection", "vulnerability", "oauth"
+
+If matched: add tag to frontmatter as `tags: [ARCH]` or `tags: [SECURITY]`
+
+batchEligible:
+  true  — if ticket is standalone (no depends_on blocking it)
+  false — if ticket has upstream dependencies not yet completed
+```
+
+### 1.5 Analyze Codebase Context
 
 Use Glob and Grep to understand the relevant parts of the codebase:
 
@@ -122,6 +142,8 @@ id: {PREFIX}-{NNN}
 title: {Actionable description derived from user request}
 status: pending
 priority: {from user or inferred}
+tags: [{ARCH or SECURITY if auto-detected, else empty list}]
+batchEligible: {true if no blocking depends_on, else false}
 created: {today's date YYYY-MM-DD}
 updated: {today's date YYYY-MM-DD}
 assignee: unassigned

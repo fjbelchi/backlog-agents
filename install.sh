@@ -11,7 +11,7 @@ set -euo pipefail
 #   ./install.sh --force                      # overwrite without prompting
 # ──────────────────────────────────────────────────────────────────────
 
-ALL_SKILLS=(backlog-init backlog-ticket backlog-refinement backlog-implementer)
+ALL_SKILLS=(backlog-init backlog-ticket backlog-refinement backlog-implementer backlog-sentinel)
 
 # ── Resolve source directory (where this script lives) ────────────────
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -130,6 +130,20 @@ for skill in "${SELECTED_SKILLS[@]}"; do
   cp -R "$src" "$dest"
   installed+=("$skill")
 done
+
+# ── Copy sentinel scripts (required by backlog-sentinel at runtime) ───
+# backlog-sentinel invokes sentinel_prescan.py and sentinel_patterns.py.
+# When installed via install.sh, CLAUDE_PLUGIN_ROOT is not set, so we
+# copy the scripts alongside the skills so the user can configure the
+# path if needed. The canonical path via /plugin install uses CLAUDE_PLUGIN_ROOT.
+SCRIPTS_SRC="${SOURCE_DIR}/scripts/ops"
+SCRIPTS_DEST="${TARGET_DIR}/../scripts/ops"
+if [[ -d "$SCRIPTS_SRC" ]]; then
+  mkdir -p "$SCRIPTS_DEST"
+  cp "${SCRIPTS_SRC}/sentinel_prescan.py" "${SCRIPTS_DEST}/" 2>/dev/null || true
+  cp "${SCRIPTS_SRC}/sentinel_patterns.py" "${SCRIPTS_DEST}/" 2>/dev/null || true
+  chmod +x "${SCRIPTS_DEST}/sentinel_prescan.py" "${SCRIPTS_DEST}/sentinel_patterns.py" 2>/dev/null || true
+fi
 
 # ── Summary ───────────────────────────────────────────────────────────
 echo ""

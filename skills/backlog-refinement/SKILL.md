@@ -89,6 +89,38 @@ Processing will follow priority order: SEC -> BUG -> QUALITY -> FEAT -> remainin
 
 ---
 
+## Phase 1.5: Deterministic Pre-Filter (No LLM)
+
+Before any LLM calls, run deterministic checks using regex/grep only:
+
+```
+FOR EACH ticket:
+  1. Check required sections present (grep for "## Context", "## Description", etc.)
+  2. Validate frontmatter YAML structure (parse YAML, check required fields)
+  3. Check file references exist (Glob check each path in Affected Files table)
+  4. Count acceptance criteria lines matching "- [ ] AC-"
+  5. Check `updated` date is plausible (not in future, not missing)
+
+Mark each ticket: DETERMINISTIC_PASS or NEEDS_LLM_REVIEW
+→ Tickets passing all deterministic checks: skip LLM, just validate VALID
+→ Only tickets with structural issues proceed to full LLM analysis
+```
+
+This eliminates LLM calls for already-healthy tickets.
+
+## Phase 1.6: Context Grouping for Cache Efficiency
+
+Before sending tickets to LLM, group them by shared codebase context:
+
+```
+Group tickets that share files in their Affected Files sections.
+Process each group consecutively so the stable system context is cached.
+Within a group, the LLM's prompt prefix (project rules, config) is identical
+→ cache hit on prefix for tickets 2..N in each group → near-free reuse.
+
+Order: SEC → BUG → QUALITY → FEAT (within each type, group by shared files)
+```
+
 ## Phase 2: Validation (Per Ticket)
 
 For each ticket, run the following checks grouped by category.
@@ -345,3 +377,5 @@ If MCP memory tools are not available, skip this step without error.
 ## Startup
 
 **Run a complete refinement of the backlog. Verify each referenced file against the actual codebase. Document all changes in the report.**
+
+Read `backlog.config.json` at startup. If `llmOps.batchPolicy.enabled` is true and ticket count >= `llmOps.batchPolicy.forceBatchWhenQueueOver`, and `--now` was NOT passed, submit refinement as a batch job and exit with instructions to run `scripts/ops/batch_reconcile.py` when complete.

@@ -1,3 +1,125 @@
+# Commands Directory
+
+## Purpose
+
+Slash command definitions that provide the user-facing interface to the Backlog Toolkit skills.
+
+## Structure
+
+Each command is a markdown file with:
+- Command description and usage
+- Parameter documentation
+- Examples
+- References to underlying skill
+
+## Command Files
+
+### `init.md`
+**Command**: `/backlog-toolkit:init`
+
+Initializes backlog structure in current project. Detects stack, creates directories, generates config.
+
+**Delegates to**: `skills/backlog-init/SKILL.md`
+
+### `ticket.md`
+**Command**: `/backlog-toolkit:ticket [description]`
+
+Creates a validated ticket with cost estimation from a short description.
+
+**Delegates to**: `skills/backlog-ticket/SKILL.md`
+
+**Examples**:
+```bash
+/backlog-toolkit:ticket "Add user authentication"
+/backlog-toolkit:ticket "Fix login redirect bug"
+```
+
+### `refinement.md`
+**Command**: `/backlog-toolkit:refinement`
+
+Runs backlog health checks, validates tickets, generates health report.
+
+**Delegates to**: `skills/backlog-refinement/SKILL.md`
+
+### `implementer.md`
+**Command**: `/backlog-toolkit:implementer`
+
+Orchestrates ticket implementation with Agent Teams and quality gates.
+
+**Delegates to**: `skills/backlog-implementer/SKILL.md`
+
+## Command vs Skill Separation
+
+### Commands (this directory)
+- User-facing interface
+- Simple parameter handling
+- Brief help text
+- Invocation examples
+
+### Skills (`skills/` directory)
+- Full implementation logic
+- Detailed procedures
+- Quality standards
+- Internal workflows
+
+This separation allows:
+- Simple user experience (commands)
+- Complex implementation (skills)
+- Easy command aliasing
+- Skill reusability
+
+## Adding New Commands
+
+1. Create `command-name.md` in this directory
+2. Define command syntax and description
+3. Add examples
+4. Reference underlying skill
+5. Register in `.claude-plugin/plugin.json`:
+```json
+{
+  "name": "command-name",
+  "command": "/backlog-toolkit:command-name",
+  "path": "commands/command-name.md",
+  "description": "Brief description"
+}
+```
+
+## Command Format
+
+```markdown
+# Command: /backlog-toolkit:command-name
+
+Brief description of what this command does.
+
+## Syntax
+
+/backlog-toolkit:command-name [required-arg] [--optional-flag]
+
+## Parameters
+
+- `required-arg`: Description
+- `--optional-flag`: Description (default: value)
+
+## Examples
+
+### Basic usage
+/backlog-toolkit:command-name arg-value
+
+### With options
+/backlog-toolkit:command-name arg-value --flag
+
+## Related
+
+- Skills: skills/skill-name/SKILL.md
+- Docs: docs/skills/skill-name.md
+```
+
+## Related Documentation
+
+- `.claude-plugin/plugin.json`: Plugin manifest with command registry
+- `skills/`: Skill implementations
+- `docs/reference/command-reference.md`: Complete command reference
+
 <claude-mem-context>
 # Recent Activity
 
@@ -8,4 +130,23 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #6784 | 4:02 PM | 🟣 | Plugin Command Structure Started | ~285 |
+
+### Feb 18, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #7145 | 2:42 PM | ✅ | Commands directory documentation created | ~252 |
+
+### Feb 19, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #7745 | 4:54 PM | 🔵 | SEC Prefix Consistency in Sentinel Integration | ~270 |
+| #7743 | " | 🔵 | Cost Guard Missing Error Handling | ~236 |
+| #7720 | 4:52 PM | 🟣 | Backlog Sentinel System Fully Implemented | ~356 |
+| #7717 | " | 🟣 | Sentinel Command Interface Created | ~351 |
+| #7705 | 4:51 PM | 🔵 | Implementer Command Structure | ~259 |
+| #7697 | " | 🔵 | Backlog Refinement Command Structure | ~262 |
+| #7672 | 4:45 PM | 🟣 | Backlog Sentinel Command Documentation | ~309 |
+| #7609 | 3:18 PM | 🔵 | Command Structure for Backlog Toolkit | ~267 |
 </claude-mem-context>

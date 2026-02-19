@@ -35,7 +35,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-SKILLS=(backlog-init backlog-ticket backlog-refinement backlog-implementer)
+SKILLS=(backlog-init backlog-ticket backlog-refinement backlog-implementer backlog-sentinel)
 
 echo "=== Install Script Validation ==="
 echo ""

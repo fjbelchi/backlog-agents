@@ -44,7 +44,7 @@ STARTUP
   nowMode = args.includes("--now")
 
 PHASE 0: DETERMINISTIC PRESCAN ($0)
-  Run: python3 scripts/ops/sentinel_prescan.py --config backlog.config.json
+  Run: python3 "${CLAUDE_PLUGIN_ROOT}/scripts/ops/sentinel_prescan.py" --config backlog.config.json
   Parse JSON output → prescan_findings[]
   Print: "Prescan complete: {N} findings"
 
@@ -123,7 +123,7 @@ PHASE 2: CREATE TICKETS
 
 PHASE 3: LEARNING + CLEANUP + SUMMARY
   Write all findings to /tmp/sentinel-findings-{commit_hash}.json
-  Run: python3 scripts/ops/sentinel_patterns.py \
+  Run: python3 "${CLAUDE_PLUGIN_ROOT}/scripts/ops/sentinel_patterns.py" \
          --findings /tmp/sentinel-findings-{commit_hash}.json \
          --config backlog.config.json \
          --propose-rules
