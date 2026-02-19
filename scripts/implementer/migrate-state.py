@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Migrate or initialize implementer state to v6.0 schema.
+"""Migrate or initialize implementer state to v6.1 schema.
 
 Usage: python3 migrate-state.py
 Reads/creates .claude/implementer-state.json with all required fields.
@@ -45,7 +45,13 @@ stats.setdefault("agentRoutingStats", {
 stats.setdefault("reviewStats", {
     "totalFindings": 0, "filteredByConfidence": 0, "avgConfidence": 0
 })
-state["version"] = "6.0"
+local = stats.setdefault("localModelStats", {})
+local.setdefault("totalAttempts", 0)
+local.setdefault("successCount", 0)
+local.setdefault("escalatedToCloud", 0)
+local.setdefault("failuresByType", {})
+local.setdefault("avgQualityScore", 0)
+state["version"] = "6.1"
 
 with open(STATE_FILE, "w") as f:
     json.dump(state, f, indent=2)
