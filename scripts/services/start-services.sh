@@ -1163,10 +1163,10 @@ start_litellm() {
         fi
 
         # Check if health endpoint responds
-        if curl -s -m 2 http://localhost:$LITELLM_PORT/health &> /dev/null; then
+        if curl -s -m 2 http://localhost:$LITELLM_PORT/health/readiness &> /dev/null; then
             echo ""
             log_success "LiteLLM started successfully (PID: $pid) in ${waited}s"
-            log_info "Health check: http://localhost:$LITELLM_PORT/health"
+            log_info "Health check: http://localhost:$LITELLM_PORT/health/readiness"
 
             # Test completions if in interactive mode
             if [ "$INTERACTIVE_MODE" = true ] && [ -n "${LITELLM_MASTER_KEY:-}" ]; then
@@ -1330,7 +1330,7 @@ verify_services() {
     local all_ok=true
 
     # LiteLLM
-    if curl -s http://localhost:$LITELLM_PORT/health &> /dev/null; then
+    if curl -s http://localhost:$LITELLM_PORT/health/readiness &> /dev/null; then
         log_success "LiteLLM: http://localhost:$LITELLM_PORT ✓"
     else
         log_error "LiteLLM: Not responding"

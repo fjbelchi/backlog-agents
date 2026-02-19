@@ -172,7 +172,7 @@ def main() -> int:
         changed_files,
         r'\b(console\.log|console\.debug|print\()',
         "Debug statement in production code", "techDebt",
-        exclude_patterns=["test", "spec", "logger", "log."]
+        exclude_patterns=["test", "spec", "logger"]
     )
 
     # Long functions

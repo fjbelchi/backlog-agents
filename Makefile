@@ -12,6 +12,7 @@ help: ## Show this help
 
 setup: ## First-time setup: create ops directories and initialize artifacts
 	@mkdir -p .backlog-ops tmp
+	@chmod +x scripts/ops/*.py scripts/ops/*.sh scripts/services/*.sh scripts/docs/*.py scripts/docs/*.sh 2>/dev/null || true
 	@./scripts/ops/sync-model-registry.sh --output $(REGISTRY)
 	@touch $(LEDGER)
 	@echo "✓ .backlog-ops/ initialized"

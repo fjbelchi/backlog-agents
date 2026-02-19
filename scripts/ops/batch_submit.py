@@ -157,6 +157,10 @@ def main() -> int:
         print(f"Error: Batch API call failed: {exc}", file=sys.stderr)
         return 1
 
+    if not getattr(batch, "id", None):
+        print("Error: Batch API returned unexpected response (empty batch ID).", file=sys.stderr)
+        return 1
+
     submitted_ids = {r["custom_id"] for r in requests}
     mark_submitted(qpath, submitted_ids)
     save_active_job(batch.id, args.queue, len(requests))
