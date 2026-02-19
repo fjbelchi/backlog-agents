@@ -7,9 +7,9 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #7999 | 5:36 PM | 🟣 | RAG integration completed across all backlog skills | ~336 |
-| #7991 | 5:35 PM | 🟣 | RAG post-file sync added to backlog-implementer | ~225 |
-| #7989 | 5:34 PM | 🔵 | Quality gates 2 and 3 implementation details located | ~173 |
-| #7969 | 5:31 PM | 🔵 | Backlog implementer v7.0 architecture documented | ~480 |
-| #7693 | 4:51 PM | 🔵 | Backlog-implementer skill already has RAG integration | ~297 |
+| #8269 | 7:51 PM | 🟣 | Implementer Skill Updated with Write-Agent Pattern | ~296 |
+| #8268 | " | 🔄 | Implementer Skill Refactored for Delegated Wave Planning | ~312 |
+| #8266 | " | 🟣 | Implementer Skill Updated with Write-Agent Pattern | ~326 |
+| #7793 | 5:05 PM | 🔴 | Fixed Model Configuration Reference | ~204 |
+| #7792 | " | 🔴 | Model Routing Configuration Fixed | ~289 |
 </claude-mem-context>

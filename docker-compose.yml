@@ -48,6 +48,8 @@ services:
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
       # Store model info and spend logs in DB (required for prompt logging in UI)
       STORE_MODEL_IN_DB: "True"
+      # Use local model cost map (don't fetch from GitHub — blocked by Zscaler SSL)
+      LITELLM_LOCAL_MODEL_COST_MAP: "true"
       # SSL verification disabled — corporate TLS inspection (Zscaler) uses a CA cert
       # that Python 3.13 rejects (Basic Constraints not marked critical per RFC 5280).
       SSL_VERIFY: "False"
@@ -57,6 +59,7 @@ services:
       - "8000:4000"
     volumes:
       - ./config/litellm/proxy-config.docker.yaml:/app/config.yaml:ro
+      - ./config/litellm/model_prices_patched.json:/app/litellm/model_prices_and_context_window_backup.json:ro
       - ./docker/certs/ca-bundle.crt:/etc/ssl/certs/ca-certificates.crt:ro
     command: ["--config", "/app/config.yaml", "--detailed_debug"]
     healthcheck:

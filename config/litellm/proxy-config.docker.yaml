@@ -172,6 +172,12 @@ litellm_settings:
   # Minimum prefix size: 1024 tokens (2048+ recommended).
   # No additional LiteLLM config needed — it's provider-native.
 
+  # ─── Custom Pricing ────────────────────────────────────────────────
+  # Models missing from LiteLLM's registry (e.g. Sonnet 4.6) get their
+  # pricing injected at startup via /app/custom_pricing.py (mounted from
+  # config/litellm/). Without this, cache token costs are null and spend
+  # logs underreport real costs.
+
 # ─── Per-Model Budgets ──────────────────────────────────────────────
 model_max_budget:
   frontier: 300              # Hard cap on frontier spend
