@@ -311,16 +311,137 @@ config/backlog.config.schema.json      ← add sentinel schema
 
 ---
 
+## Continuous Learning Layer
+
+Without a learning mechanism, the sentinel detects the same errors indefinitely. This layer closes the feedback loop so future implementations avoid known patterns.
+
+```
+Sentinel detects error → creates ticket
+Implementer fixes it  → commit
+        ↑                      ↓
+Next implementations     Sentinel records pattern
+avoid the pattern   ←    occurrences >= N threshold
+(codeRules updated)  ←   → auto-update codeRules
+```
+
+### Layer 1 — Pattern Ledger (`.backlog-ops/sentinel-patterns.json`)
+
+Updated by the sentinel at the end of every Phase 3:
+
+```json
+{
+  "version": "1.0",
+  "patterns": [
+    {
+      "id": "jwt-not-validated",
+      "description": "JWT decoded without signature verification",
+      "category": "security",
+      "occurrences": 4,
+      "files": ["src/auth/login.ts", "src/api/middleware.ts"],
+      "first_seen": "2026-02-10",
+      "last_seen": "2026-02-19",
+      "status": "recurring",
+      "escalated_to_rules": false
+    }
+  ],
+  "thresholds": {
+    "recurring": 2,
+    "escalate_to_soft_gate": 3,
+    "escalate_to_hard_gate": 5
+  }
+}
+```
+
+The sentinel matches each new finding against existing patterns using RAG similarity. On match: increments `occurrences`. On miss: creates new entry.
+
+### Layer 2 — Auto-Update `codeRules.source`
+
+When `occurrences >= thresholds.escalate_to_soft_gate`, the sentinel proposes adding the pattern as a gate:
+
+```markdown
+## Soft Gates  (auto-added by sentinel — review before accepting)
+- [ ] JWT tokens MUST use `jwt.verify()`, never `jwt.decode()` alone
+      [sentinel: 4 occurrences across 2 files — last seen 2026-02-19]
+- [ ] Never call ORM queries inside forEach/map (N+1 pattern)
+      [sentinel: 3 occurrences — last seen 2026-02-18]
+```
+
+**In git hook mode:** proposes the diff and asks for confirmation before push.
+**In on-demand mode:** applies directly with an `[auto-added]` marker.
+
+When `occurrences >= thresholds.escalate_to_hard_gate`: promoted to `hardGates` — blocks commit if violated. The implementer's Gate 3 (LINT) enforces hard gates.
+
+### Layer 3 — RAG as Implementer Memory
+
+The RAG server indexes completed sentinel tickets alongside source code. Before Gate 2 (IMPLEMENT), the implementer queries:
+
+```python
+warnings = rag.search(
+    query=f"recurring errors in {', '.join(affected_files)}",
+    filter={"found_by": "backlog-sentinel"},
+    n=3
+)
+```
+
+The implementer's prompt receives a **Recurring Patterns** block before writing any code:
+
+```
+RECURRING PATTERNS (from sentinel history) — avoid these:
+- jwt-not-validated (4× in src/auth/) — always use jwt.verify()
+- n-plus-one-query (3× in src/services/) — batch queries outside loops
+```
+
+This costs ~$0 (RAG lookup) and eliminates the most common error categories before the LLM writes a single line.
+
+### Learning Loop Summary
+
+```
+sentinel_prescan.py
+  + reviewer findings
+        ↓
+Update sentinel-patterns.json       ← every commit, $0
+        ↓
+occurrences >= 3?
+  YES → propose codeRules update    ← human confirms or auto-applies
+        ↓
+codeRules.source updated
+        ↓
+backlog-implementer reads codeRules ← Gate 1 PLAN injection
+  + RAG sentinel memory query       ← Gate 2 IMPLEMENT injection
+        ↓
+Implementer avoids known patterns → fewer bugs → fewer sentinel tickets
+→ lower cost per session over time
+```
+
+The learning is cumulative. Projects that use the sentinel for 2–4 weeks converge toward a hardened `codeRules.source` that encodes the team's actual failure modes — not generic best practices.
+
+### New Files for Learning Layer
+
+```
+scripts/ops/sentinel_patterns.py    ← pattern matching + ledger update
+.backlog-ops/sentinel-patterns.json ← pattern ledger (gitignored or committed)
+```
+
+The `sentinel_prescan.py` script calls `sentinel_patterns.py` at the end of Phase 3.
+
+---
+
 ## Cost Model
 
 Per typical commit (3–5 files changed):
 
 ```
 Phase 0 prescan:        $0.00  (grep, lint, tests)
-Phase 0.5 RAG:          $0.00  (vector search)
+Phase 0.5 RAG:          $0.00  (vector search + duplicate check)
 security-reviewer:      ~$0.04 (Sonnet, ~800t in + ~400t out)
 quality-reviewer:       ~$0.02 (Haiku, ~600t in + ~300t out)
 ticket creation (×5):   ~$0.03 (Haiku for validation)
+pattern ledger update:  $0.00  (deterministic)
 ─────────────────────────────────────────────
 Total per commit:       ~$0.09
+
+Over time (learning effect):
+  Week 1:  ~$0.09/commit  (baseline)
+  Week 4:  ~$0.05/commit  (recurring patterns caught by prescan/codeRules)
+  Week 8:  ~$0.03/commit  (hardened codeRules, few surprises for LLM)
 ```
