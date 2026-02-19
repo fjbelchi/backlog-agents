@@ -160,6 +160,56 @@ def index():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/projects', methods=['GET'])
+def list_projects():
+    """List all indexed projects with document counts."""
+    base = Path(BASE_PATH)
+    projects = []
+    if base.exists():
+        for d in sorted(base.iterdir()):
+            if d.is_dir():
+                col = _get_collection(d.name)
+                try:
+                    code_ids = col.get(where={"type": "code"})["ids"]
+                    ticket_ids = col.get(where={"type": "ticket"})["ids"]
+                except Exception:
+                    code_ids, ticket_ids = [], []
+                projects.append({
+                    "name": d.name,
+                    "count": col.count(),
+                    "code_count": len(code_ids),
+                    "ticket_count": len(ticket_ids),
+                })
+    return jsonify({"projects": projects})
+
+
+@app.route('/projects/<name>', methods=['DELETE'])
+def delete_project(name):
+    """Delete a project's index and all its data."""
+    import shutil
+    if name in _clients:
+        del _clients[name]
+        del _collections[name]
+    path = os.path.join(BASE_PATH, name)
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    return jsonify({"deleted": name})
+
+
+@app.route('/projects/<name>/stats', methods=['GET'])
+def project_stats(name):
+    """Get statistics for a specific project."""
+    col = _get_collection(name)
+    return jsonify({"name": name, "count": col.count(), "metadata": col.metadata})
+
+
+@app.route('/projects/<name>/init', methods=['POST'])
+def init_project(name):
+    """Pre-initialize a project collection without indexing any documents."""
+    _get_collection(name)
+    return jsonify({"initialized": name})
+
+
 @app.route('/stats', methods=['GET'])
 def stats():
     """Get collection statistics for the default project (or X-Project header)"""

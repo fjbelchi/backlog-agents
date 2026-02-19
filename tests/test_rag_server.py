@@ -92,3 +92,35 @@ def test_index_requires_documents(client):
     r = client.post("/index", json={"project": "alpha", "documents": []})
     assert r.status_code == 400
     assert "error" in r.get_json()
+
+
+def test_list_projects(client):
+    client.post("/index", json={"project": "proj-a", "documents": ["x"], "ids": ["proj-a::f::0"], "metadatas": [{"type": "code"}]})
+    r = client.get("/projects")
+    assert r.status_code == 200
+    names = [p["name"] for p in r.get_json()["projects"]]
+    assert "proj-a" in names
+
+
+def test_delete_project(client):
+    client.post("/index", json={"project": "to-delete", "documents": ["x"], "ids": ["to-delete::f::0"], "metadatas": [{"type": "code"}]})
+    r = client.delete("/projects/to-delete")
+    assert r.status_code == 200
+    r2 = client.get("/projects")
+    names = [p["name"] for p in r2.get_json()["projects"]]
+    assert "to-delete" not in names
+
+
+def test_init_project(client):
+    r = client.post("/projects/newproj/init")
+    assert r.status_code == 200
+    assert r.get_json()["initialized"] == "newproj"
+
+
+def test_project_stats(client):
+    client.post("/index", json={"project": "stat-proj", "documents": ["hello"], "ids": ["stat-proj::h::0"], "metadatas": [{"type": "code"}]})
+    r = client.get("/projects/stat-proj/stats")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["name"] == "stat-proj"
+    assert data["count"] == 1
