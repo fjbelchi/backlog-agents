@@ -201,16 +201,10 @@ Scan `~/.claude/plugins/` for superpowers (TDD, debugging, verification, code-re
 
 Read ticket metadata (IDs, priorities, affected files) — do NOT output analysis inline.
 
-Delegate wave planning to a sonnet subagent:
-
-```
-Task(
-  subagent_type: "general-purpose",
-  model: "sonnet",
-  prompt: """
-Analyze these tickets and return a wave plan as JSON. Do NOT output explanations.
-
-Tickets (id, priority, affected_files):
+# Try Ollama first (free)
+WAVE_JSON=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free \
+  --system "You analyze tickets and return wave plans as JSON. No explanations." \
+  --user "Tickets (id, priority, affected_files):
 {ticket_metadata_list}
 
 Rules:
@@ -219,26 +213,20 @@ Rules:
 - Tickets affecting different directories almost never conflict
 - Select subagent_type per ticket based on file patterns
 - BATCH SIMILAR TICKETS: If 2+ tickets share the same prefix, same directory, and same
-  change pattern (e.g., "add X to files in dir/"), group them into ONE slot with
-  "batch": true. The implementer processes them sequentially (edit→commit→next) to avoid
-  paying setup overhead multiple times. Mark as: {"batch": true, "ticket_ids": ["T-001","T-002"]}
+  change pattern, group them into ONE slot with batch: true.
 
 Return ONLY this JSON:
-{
-  "waves": [
-    {
-      "wave": 1,
-      "tickets": [
-        {"id": "BUG-001", "subagent_type": "backend", "rationale": "auth service"},
-        {"id": "FEAT-003", "subagent_type": "frontend", "rationale": "UI component"}
-      ]
-    }
-  ],
-  "skipped": [{"id": "FEAT-010", "reason": "depends on BUG-001"}]
-}
-"""
-)
-```
+{\"waves\":[{\"wave\":1,\"tickets\":[{\"id\":\"BUG-001\",\"subagent_type\":\"backend\",\"rationale\":\"auth service\"}]}],\"skipped\":[]}")
+
+# Validate JSON response; fallback to Haiku subagent if invalid
+if ! echo "$WAVE_JSON" | python3 -c "import json,sys; json.load(sys.stdin)" 2>/dev/null; then
+  # Ollama failed or returned invalid JSON — use Haiku subagent
+  Task(
+    subagent_type: "general-purpose",
+    model: "haiku",
+    prompt: """...same wave planning prompt as above..."""
+  )
+fi
 
 Use the returned JSON to create the team and assign tasks.
 
@@ -253,7 +241,7 @@ Spawn teammates via Task tool (model: "sonnet" by default):
 
 1. implementer-1:
    subagent_type: select based on ticket area
-   model: "sonnet"  (omit if ARCH/SECURITY/escalation → inherits parent)
+   model: "haiku"  (omit if ARCH/SECURITY/escalation → inherits parent)
    team_name: "impl-{timestamp}"
    name: "implementer-1"
 
@@ -265,7 +253,7 @@ Spawn teammates via Task tool (model: "sonnet" by default):
 
 3. investigator:
    subagent_type: "general-purpose"
-   model: "sonnet"
+   model: "haiku"
    team_name: "impl-{timestamp}"
    name: "investigator"
 ```
