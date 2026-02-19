@@ -83,10 +83,11 @@
       "requireEscalationReason": true
     },
     "routing": {
-      "entryModelClassify": "cheap",
-      "entryModelDraft": "cheap",
-      "entryModelImplement": "balanced",
-      "entryModelReview": "cheap",
+      "entryModelClassify": "free",
+      "entryModelPlan": "free",
+      "entryModelDraft": "free",
+      "entryModelImplement": "cheap",
+      "entryModelReview": "balanced",
       "escalationModel": "frontier",
       "maxEscalationsPerTicket": 1
     },
