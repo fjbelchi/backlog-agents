@@ -311,7 +311,30 @@ Spawn teammates via Task tool (NO model: parameter):
 ### Gate 1: PLAN
 
 **Model**: apply escalation rules (see Cost-Aware Execution). Default: `entryModelDraft` (balanced).
-**RAG**: if ragAvailable, query RAG with ticket description first; use returned snippets instead of full file reads.
+**RAG**: if ragAvailable:
+1. Query RAG with ticket description → use top-K snippets instead of full file reads:
+   ```
+   POST {ragPolicy.serverUrl}/search
+   Body: {"project": project_name, "query": ticket.description, "n_results": ragPolicy.topK}
+   ```
+2. Query sentinel memory for recurring patterns in affected files:
+   ```
+   POST {ragPolicy.serverUrl}/search
+   Body: {
+     "project": project_name,
+     "query": "<affected_files joined as string>",
+     "n_results": 3,
+     "filter": {"found_by": "backlog-sentinel"}
+   }
+   ```
+   If results found with distance < 0.3 (high similarity), inject a **Recurring Patterns** block at the TOP of the implementer prompt (before the ticket content):
+   ```
+   WARNING: RECURRING PATTERNS — avoid these known mistakes:
+   - {pattern.description} (found in {pattern.file})
+   ```
+   This costs $0 (RAG lookup) and prevents known failure modes before any code is written.
+
+If RAG server is unreachable, fall back to direct file reads without error.
 
 Implementer receives ticket and MUST:
 1. Read ticket .md completely
@@ -361,6 +384,12 @@ SOFT GATES (review + justify): {config.codeRules.softGates}
 ```
 
 If `codeRules.source` is not configured, skip code rules injection but still enforce TDD and Iron Laws.
+
+**Post-file RAG sync**: After each file is written or modified by a subagent, if ragAvailable:
+```bash
+source scripts/rag/client.sh && rag_upsert_file "{modified_file_path}"
+```
+This keeps the index current during multi-file implementations so later tasks in the same wave can query the latest code state.
 
 ### Gate 3: LINT GATE
 
