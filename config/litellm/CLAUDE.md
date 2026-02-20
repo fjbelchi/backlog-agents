@@ -79,10 +79,6 @@ LiteLLM tracks costs per request. Configure `success_callback` to log to your an
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #7718 | 4:52 PM | 🔵 | LiteLLM Proxy Configuration Architecture | ~335 |
-| #7711 | " | 🔵 | LiteLLM Proxy Configuration for Docker | ~332 |
-| #7537 | 2:20 PM | ✅ | Redis Cache Enabled in LiteLLM Configuration | ~242 |
-| #7535 | " | 🔵 | LiteLLM Cache Configuration Status | ~247 |
 | #7488 | 11:39 AM | 🔵 | LiteLLM Proxy Multi-Tier Model Configuration | ~366 |
 | #7473 | 11:37 AM | 🔵 | Analyzed existing RAG and service infrastructure | ~339 |
 | #7467 | 11:36 AM | 🔵 | LiteLLM Template Configuration Strategy | ~254 |
