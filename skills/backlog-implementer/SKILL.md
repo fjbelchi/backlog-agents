@@ -391,6 +391,14 @@ Spawn teammates via Task tool (model: "sonnet" by default):
 
 ### Gate 1: PLAN
 
+**Context tracking**: Before spawning the planning agent, set the backlog context:
+```bash
+source scripts/ops/context.sh
+set_backlog_context "$ticket_id" "plan" "$routed_agent_type" "backlog-implementer"
+```
+Update gate name as work progresses: `"plan"` → `"implement"` → `"lint"` → `"review"`.
+Call `clear_backlog_context` after Gate 5 COMMIT completes.
+
 **Model**: apply escalation rules (see Cost-Aware Execution). Default: `entryModelPlan` (free via llm_call.sh). If Ollama unavailable or response invalid → fallback to Task(model: "haiku").
 **RAG**: if ragAvailable:
 1. `POST {serverUrl}/search` with ticket description, get top-K snippets instead of full file reads

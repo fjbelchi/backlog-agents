@@ -42,6 +42,13 @@ Never generate more than 50 lines of file content per tool call.
 
 ## Phase 1: Inventory
 
+**Context tracking**: At start of refinement run:
+```bash
+source scripts/ops/context.sh
+set_backlog_context "" "refine" "refinement" "backlog-refinement"
+```
+Call `clear_backlog_context` after the health report is generated.
+
 ### 1.1 Read Configuration
 
 Read `backlog.config.json` from the project root.

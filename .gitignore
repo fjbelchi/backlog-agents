@@ -5,6 +5,7 @@ tmp/
 # Backlog ops: gitignore transient/local files, but allow sentinel-patterns.json to be committed
 .backlog-ops/*
 !.backlog-ops/sentinel-patterns.json
+.backlog-ops/current-context.json
 .claude/cost-history.json
 .env.docker.local
 docker/certs/ca-bundle.crt

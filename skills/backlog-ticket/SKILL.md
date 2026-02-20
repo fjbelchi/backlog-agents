@@ -42,6 +42,13 @@ Never generate more than 50 lines of file content per tool call.
 
 ## Phase 1: Analysis
 
+**Context tracking**: At start of ticket generation:
+```bash
+source scripts/ops/context.sh
+set_backlog_context "" "generate" "ticket" "backlog-ticket"
+```
+Call `clear_backlog_context` after the ticket file is saved.
+
 ### 1.1 Read Configuration
 
 Read `backlog.config.json` from the project root.
