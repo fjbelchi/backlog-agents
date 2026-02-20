@@ -65,6 +65,7 @@ services:
       - ./config/litellm/model_prices_patched.json:/app/litellm/model_prices_and_context_window_backup.json:ro
       - ./docker/certs/ca-bundle.crt:/etc/ssl/certs/ca-certificates.crt:ro
       - ./config/litellm/callbacks:/app/callbacks:ro
+      - ./config/litellm/callbacks/ticket_tagger.py:/app/ticket_tagger.py:ro
       - ${HOME}/.backlog-toolkit:/root/.backlog-toolkit:ro
     command: ["--config", "/app/config.yaml", "--detailed_debug"]
     healthcheck:

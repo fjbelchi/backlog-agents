@@ -249,7 +249,7 @@ litellm_settings:
   # Python 3.13 rejects Zscaler's CA cert (Basic Constraints not marked critical).
   # Traffic still goes through Zscaler regardless, so this is safe inside Docker.
   ssl_verify: false
-  callbacks: ["ticket_tagger.TicketTagger"]
+  # callbacks: ["ticket_tagger.TicketTagger"]  # DISABLED: class loaded without instantiation, causes 500. TODO: fix CustomLogger registration
 
   # Global budget
   budget_duration: monthly
