@@ -6,6 +6,7 @@ PASS=0; FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS+1)); }
 fail() { echo "  FAIL: $1"; FAIL=$((FAIL+1)); }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMPDIR_TEST="$(mktemp -d)"
 ORIG_HOME="$HOME"
 export HOME="$TMPDIR_TEST"
@@ -15,7 +16,7 @@ mkdir -p "$TMPDIR_TEST/proj"
 echo '{"project":{"name":"test-proj"}}' > "$TMPDIR_TEST/proj/backlog.config.json"
 cd "$TMPDIR_TEST/proj"
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/ops/context.sh"
+source "$SCRIPT_DIR/../scripts/ops/context.sh"
 
 # Test 1: set_backlog_context writes global file
 set_backlog_context "FEAT-001" "plan" "backend" "backlog-implementer"
