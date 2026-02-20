@@ -69,7 +69,12 @@
       }
     ],
     "confidenceThreshold": 80,
-    "maxReviewRounds": 3
+    "maxReviewRounds": 3,
+    "frontierReview": {
+      "enabled": true,
+      "triggerPatterns": ["serialization", "db_schema", "auth", "error_handling", "external_api", "concurrency"],
+      "skipForComplexity": ["trivial"]
+    }
   },
   "llmOps": {
     "registry": {

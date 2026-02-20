@@ -83,6 +83,7 @@ codeRules.source (skip if unset) | codeRules.hardGates ([]) | codeRules.softGate
 qualityGates: lintCommand, typeCheckCommand (skip if unset) | testCommand (REQUIRED) | buildCommand, healthCheckCommand (skip if unset)
 agentRouting.rules (general-purpose) | agentRouting.llmOverride (true)
 reviewPipeline.reviewers (2: spec+quality) | reviewPipeline.confidenceThreshold (80)
+reviewPipeline.frontierReview: enabled (true) | triggerPatterns (all) | skipForComplexity (["trivial"])
 llmOps.routing: entryModelImplement (balanced) | entryModelReview (cheap) | escalationRules ([])
 llmOps.batchPolicy ({forceBatchWhenQueueOver: 1})
 llmOps.ragPolicy: enabled (false) | serverUrl (http://localhost:8001)
@@ -113,6 +114,7 @@ Before each LLM call, select the model tier using escalation rules:
    Gate 2 IMPLEMENT → config.llmOps.routing.entryModelImplement  (default: "cheap")
    Gate 3 LINT      → always "cheap" (runs tools, LLM analyzes output)
    Gate 4 REVIEW    → config.llmOps.routing.entryModelReview     (default: "balanced")
+   Gate 4b FRONTIER → config.llmOps.routing.escalationModel     (default: "frontier") — selective, only high-risk
    Gate 5 COMMIT    → "free" via llm_call.sh (template fallback if Ollama unavailable)
 ```
 
@@ -255,16 +257,56 @@ All project-specific data is loaded here — NOT at skill prompt load time. This
 
 Scan `~/.claude/plugins/` for superpowers (TDD, debugging, verification, code-review) and stack-specific plugins (python: pg-aiguide, aws-skills; typescript: playwright-skill). Note any configured MCP servers. Log detected capabilities. When an external skill is available for a discipline, prefer it over the embedded catalog version.
 
+**Resolve Plugin Root** (MUST run before any script references):
+```bash
+# CLAUDE_PLUGIN_ROOT may not be set in the session environment.
+# Resolve it by finding the installed backlog-toolkit plugin.
+if [ -z "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  # Search common plugin installation paths
+  for candidate in \
+    ~/.claude/plugins/cache/backlog-toolkit*/*/  \
+    ~/.claude/plugins/backlog-toolkit/  \
+    ~/github/backlog-agents/  \
+    ; do
+    if [ -f "${candidate}scripts/ops/llm_call.sh" ]; then
+      export CLAUDE_PLUGIN_ROOT="${candidate%/}"
+      break
+    fi
+  done
+fi
+
+if [ -z "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  echo "⚠ CLAUDE_PLUGIN_ROOT not found. llm_call.sh and RAG scripts unavailable."
+  echo "  Scripts that depend on plugin root will fall back to cloud defaults."
+fi
+```
+Log: `"Plugin root: ${CLAUDE_PLUGIN_ROOT:-NOT FOUND}"`
+
+**LiteLLM Connection** (set defaults if not configured):
+```bash
+export LITELLM_BASE_URL="${LITELLM_BASE_URL:-http://localhost:8000}"
+export LITELLM_MASTER_KEY="${LITELLM_MASTER_KEY:-$(grep LITELLM_MASTER_KEY .env.docker.local 2>/dev/null | cut -d= -f2)}"
+```
+
 **Ollama Detection** (critical for cost optimization):
 ```bash
-OLLAMA_RESULT=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free --tag "gate:health-check" --user "Reply OK" 2>&1)
-OLLAMA_EXIT=$?
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  OLLAMA_RESULT=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free --tag "gate:health-check" --user "Reply OK" 2>&1)
+  OLLAMA_EXIT=$?
+else
+  # Fallback: test Ollama directly via LiteLLM
+  OLLAMA_RESULT=$(curl -s -m 10 "${LITELLM_BASE_URL}/v1/chat/completions" \
+    -H "Authorization: Bearer ${LITELLM_MASTER_KEY}" \
+    -H "Content-Type: application/json" \
+    -d '{"model":"free","messages":[{"role":"user","content":"Reply OK"}],"max_tokens":5}' 2>&1)
+  OLLAMA_EXIT=$?
+fi
 ```
 - If exit 0 and response contains "OK": set `ollamaAvailable=true`
 - Log: `"✓ Local model: free tier via Ollama (qwen3-coder) — plan/commit gates will use $0 local model"`
 - If exit != 0: set `ollamaAvailable=false`
 - Log: `"⚠ Ollama unavailable (exit=${OLLAMA_EXIT}). All gates fall back to cloud models. Reason: ${OLLAMA_RESULT}"`
-- Also log: `"  → LiteLLM URL: ${LITELLM_BASE_URL:-http://localhost:8000}, Key: ${LITELLM_MASTER_KEY:+set}${LITELLM_MASTER_KEY:-unset}"`
+- Also log: `"  → LiteLLM URL: ${LITELLM_BASE_URL}, Key: ${LITELLM_MASTER_KEY:+set}${LITELLM_MASTER_KEY:-unset}, Plugin: ${CLAUDE_PLUGIN_ROOT:-NOT SET}"`
 
 **Model Routing Summary** (print in startup banner):
 ```
@@ -274,6 +316,7 @@ Model routing for this session:
   Gate 2 IMPL:   haiku (cloud) — escalates to sonnet on failure
   Gate 3 LINT:   haiku (cloud)
   Gate 4 REVIEW: sonnet (cloud)
+  Gate 4b FRONTIER: opus (selective — only for high-risk patterns)
   Gate 5 COMMIT: ${ollamaAvailable ? "free (Ollama)" : "template fallback"}
   Escalation:    inherits parent on ARCH/SECURITY/high-complexity
 ```
@@ -440,6 +483,75 @@ Reviewer prompt construction:
 **Auto-escalation**: SEC tickets with < 4 reviewers auto-add security + history reviewers.
 
 **Consolidation**: Collect findings, filter by confidence >= `confidenceThreshold`, classify (Critical/Important/Suggestion). Critical/Important from `required` reviewers triggers re-review. Max `maxReviewRounds` then `review-blocked`. Result: `APPROVED` or `CHANGES_REQUESTED`.
+
+### Gate 4b: FRONTIER REVIEW (Selective Opus Escalation)
+
+**When**: After Gate 4 reviewers APPROVE (not on every ticket — only when high-risk patterns detected).
+
+**Purpose**: Catch edge-case defects that Sonnet misses: type safety across serialization boundaries, error propagation gaps, production deployment considerations, semantic dead weight. Costs ~$0.05-0.15 per ticket but closes the quality gap from ~75% to ~90% of Opus-level review.
+
+**Trigger — scan the diff for HIGH-RISK patterns:**
+
+```
+HIGH_RISK_PATTERNS (any match triggers Gate 4b):
+  - SERIALIZATION:  JSON.parse, JSON.stringify, Redis get/set, cache round-trip,
+                    Buffer, protobuf, msgpack, toJSON, fromJSON
+  - DB_SCHEMA:      new Schema, createIndex, dropIndex, addColumn, migration,
+                    .index({, schema.indexes(), model changes with index: true
+  - AUTH:           jwt, token, session, password, bcrypt, oauth, permission, role
+  - ERROR_HANDLING: Promise.all, Promise.allSettled, try/catch with external calls,
+                    fallback logic, circuit breaker, retry, timeout
+  - EXTERNAL_API:   new HttpClient, fetch(, axios, got(, new import of external SDK
+  - CONCURRENCY:    Promise.all, Promise.race, worker_threads, cluster, mutex, lock
+```
+
+**Skip Gate 4b when:**
+  - Diff touches only: tests, docs, config, comments, formatting
+  - Ticket complexity is "trivial"
+  - `maxEscalationsPerTicket` already reached
+
+**Execution:**
+
+```
+1. Spawn ONE frontier review subagent:
+   Task(model: "opus", subagent_type: "code-quality")
+
+2. Prompt (focused, not full re-review):
+   "You are a senior reviewer doing a FINAL CHECK on code already approved by Sonnet.
+    Focus ONLY on these patterns found in the diff: {detected_patterns}
+
+    CHECKLIST (check each that applies):
+    □ TYPE SAFETY: Do types survive serialization round-trips? (JSON.parse loses Date,
+      Buffer, BigInt, Map, Set, RegExp, undefined). Are interfaces consistent across
+      API boundaries?
+    □ ERROR PROPAGATION: Does Promise.all reject cleanly on partial failure?
+      Are external call failures handled without silent data loss?
+    □ PRODUCTION READINESS: Are DB migrations needed beyond schema changes?
+      Will this work in a rolling deployment (old + new code running simultaneously)?
+    □ SEMANTIC CORRECTNESS: Are field names accurate? Are there dead fields
+      (two fields with identical values)? Do calculations match their names?
+    □ RESOURCE MANAGEMENT: Are connections/handles properly cleaned up?
+      Could this leak memory under load?
+    □ BACKWARD COMPATIBILITY: Does this change break existing API consumers?
+      Are there callers that depend on the old behavior?
+
+    Diff to review:
+    {diff}
+
+    Score each finding 0-100 confidence. Only report Critical/Important.
+    If nothing found, respond: APPROVED — no edge-case issues detected."
+
+3. If Opus finds Critical/Important findings:
+   - CHANGES_REQUESTED, implementer fixes, then re-run Gate 4 (Sonnet) only
+   - Do NOT re-run Gate 4b (prevent Opus review loops)
+   - Log: "Opus review caught {N} findings: {summary}"
+
+4. If APPROVED:
+   - Log: "Opus review: APPROVED (no edge-case issues)"
+   - Proceed to Gate 5
+```
+
+**Cost tracking**: Add `frontier_review: true/false` and `frontier_review_findings: N` to usage ledger.
 
 ### Gate 5: COMMIT
 

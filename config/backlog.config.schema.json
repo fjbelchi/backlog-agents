@@ -261,6 +261,36 @@
           "type": "number",
           "description": "Maximum number of review-fix cycles before escalation.",
           "default": 3
+        },
+        "frontierReview": {
+          "type": "object",
+          "description": "Selective frontier (Opus) review for high-risk changes. Runs after Sonnet review approves.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable Gate 4b frontier review for high-risk patterns.",
+              "default": true
+            },
+            "triggerPatterns": {
+              "type": "array",
+              "description": "Pattern categories that trigger frontier review. Default: all categories.",
+              "items": {
+                "type": "string",
+                "enum": ["serialization", "db_schema", "auth", "error_handling", "external_api", "concurrency"]
+              },
+              "default": ["serialization", "db_schema", "auth", "error_handling", "external_api", "concurrency"]
+            },
+            "skipForComplexity": {
+              "type": "array",
+              "description": "Skip frontier review for these complexity levels.",
+              "items": {
+                "type": "string",
+                "enum": ["trivial"]
+              },
+              "default": ["trivial"]
+            }
+          }
         }
       }
     },
