@@ -12,7 +12,8 @@ Initialize a backlog system in the current project. This skill detects the proje
 
 ```
 model: "sonnet"  → write-agents: config generation, template writing, directory setup
-no model:        → analysis agents — inherits parent
+model: "haiku"   → analysis agents (if needed for large project scanning)
+NEVER omit model: — parent may be Opus; always set explicitly.
 ```
 
 ## OUTPUT DISCIPLINE

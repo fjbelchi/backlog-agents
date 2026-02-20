@@ -1,7 +1,7 @@
 {
   "name": "backlog-toolkit",
   "description": "Reusable backlog management toolkit for Claude Code. Stack-agnostic skills for ticket creation with gap detection, refinement, and implementation with Agent Teams. Includes cost estimation and tracking.",
-  "version": "2.1.2",
+  "version": "2.2.0",
   "author": {
     "name": "fbelchi",
     "url": "https://github.com/fbelchi"

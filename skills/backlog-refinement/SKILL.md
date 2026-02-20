@@ -16,10 +16,8 @@ This skill runs inside a target project that has been initialized with `backlog-
 
 ```
 model: "sonnet"  → write-agents: report generation, ticket file updates
-no model:        → analysis agents: code verification, duplicate detection — inherits parent
-
-PROHIBITED for analysis agents:
-  - model: "opus" / model: "haiku"
+model: "haiku"   → analysis agents: code verification, duplicate detection
+NEVER omit model: — parent may be Opus/Sonnet; always set explicitly.
 ```
 
 ## OUTPUT DISCIPLINE
@@ -241,9 +239,9 @@ Split: ~60% input, ~40% output.
 
 | Model | Input $/1M | Output $/1M |
 |-------|-----------|------------|
-| Claude Opus 4 | $15.00 | $75.00 |
-| Claude Sonnet 4 | $3.00 | $15.00 |
-| Claude Haiku 3.5 | $0.80 | $4.00 |
+| Claude Opus 4 | $5.50 | $27.50 |
+| Claude Sonnet 4 | $3.30 | $16.50 |
+| Claude Haiku 3.5 | $1.10 | $5.50 |
 
 ```
 cost = (input_tokens / 1_000_000 * input_price) + (output_tokens / 1_000_000 * output_price)
@@ -301,7 +299,7 @@ For each ticket:
 7. EXECUTE  - Apply the decided action (see Phase 4)
 ```
 
-For codebase scanning on large projects, use the **Task** tool to delegate file verification to a subagent. Do NOT pass model: to the Task tool.
+For codebase scanning on large projects, use the **Task** tool to delegate file verification to a subagent with `model: "haiku"`.
 
 ---
 
@@ -534,7 +532,7 @@ If MCP memory tools are not available, skip this step without error.
 - ALWAYS move obsolete tickets to completed/ (never delete without moving)
 - NEVER delete tickets without moving them to completed/ first
 - NEVER change the essence of the issue -- only improve clarity, accuracy, and completeness
-- NEVER pass model: parameter to Task tool subagents
+- ALWAYS pass model: "haiku" to analysis subagents, model: "sonnet" to write-agents
 
 ---
 

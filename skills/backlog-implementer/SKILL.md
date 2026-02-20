@@ -132,7 +132,7 @@ LOCAL-ELIGIBLE tickets (ALL must be true):
   - localModelStats.escalatedToCloud / totalAttempts < 0.30
 
 For LOCAL-ELIGIBLE tickets:
-  Gate 1 PLAN:      result=$(bash scripts/ops/llm_call.sh --model free --system "Write implementation plan" --file ticket.md)
+  Gate 1 PLAN:      result=$(bash scripts/ops/llm_call.sh --model free --tag "ticket:{id}" --tag "gate:plan" --system "Write implementation plan" --file ticket.md)
                     If empty or error → fallback to Task(model: "haiku") subagent
   Gate 2 IMPLEMENT: Task() subagent (needs tool_use for edits). Use normal routing.
   Gate 3 LINT:      → run locally (no LLM)
@@ -169,8 +169,15 @@ If `config.llmOps.ragPolicy.enabled`: query `{serverUrl}/search` with ticket des
 
 After each gate, append to `.backlog-ops/usage-ledger.jsonl`:
 ```json
-{"ticket_id": "FEAT-001", "gate": "implement", "model": "balanced", "input_tokens": 1200, "output_tokens": 800, "cache_read_tokens": 1050, "cache_creation_tokens": 150, "cache_hit_rate": 0.88, "cost_usd": 0.0156, "date": "2026-02-19"}
+{"ticket_id": "FEAT-001", "gate": "implement", "requested_model": "cheap", "actual_model": "haiku", "escalated": false, "input_tokens": 1200, "output_tokens": 800, "cache_read_tokens": 1050, "cache_creation_tokens": 150, "cache_hit_rate": 0.88, "cost_usd": 0.0156, "ollama_attempted": false, "ollama_fallback": false, "date": "2026-02-19"}
 ```
+
+Fields for model tracking:
+- `requested_model`: the tier alias requested (free/cheap/balanced/frontier)
+- `actual_model`: the model that actually served the request (e.g. "ollama/qwen3-coder:30b", "claude-haiku-4-5", "claude-sonnet-4-6")
+- `escalated`: true if the model was escalated from the default for this gate
+- `ollama_attempted`: true if free tier was tried via llm_call.sh
+- `ollama_fallback`: true if Ollama failed and fell back to cloud
 
 **Cache fields** (extract from LiteLLM response headers or Task metadata):
 - `cache_read_tokens`: tokens served from cache (header: `x-litellm-cache-read-input-tokens`)
@@ -246,7 +253,30 @@ All project-specific data is loaded here — NOT at skill prompt load time. This
 
 ## Phase 0.5: Detect Capabilities
 
-Scan `~/.claude/plugins/` for superpowers (TDD, debugging, verification, code-review) and stack-specific plugins (python: pg-aiguide, aws-skills; typescript: playwright-skill). Note any configured MCP servers. Log detected capabilities. When an external skill is available for a discipline, prefer it over the embedded catalog version. Also check Ollama: `bash scripts/ops/llm_call.sh --model free --user "Reply OK"`. If response received, set ollamaAvailable=true, log "Local model: free tier via Ollama".
+Scan `~/.claude/plugins/` for superpowers (TDD, debugging, verification, code-review) and stack-specific plugins (python: pg-aiguide, aws-skills; typescript: playwright-skill). Note any configured MCP servers. Log detected capabilities. When an external skill is available for a discipline, prefer it over the embedded catalog version.
+
+**Ollama Detection** (critical for cost optimization):
+```bash
+OLLAMA_RESULT=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free --tag "gate:health-check" --user "Reply OK" 2>&1)
+OLLAMA_EXIT=$?
+```
+- If exit 0 and response contains "OK": set `ollamaAvailable=true`
+- Log: `"✓ Local model: free tier via Ollama (qwen3-coder) — plan/commit gates will use $0 local model"`
+- If exit != 0: set `ollamaAvailable=false`
+- Log: `"⚠ Ollama unavailable (exit=${OLLAMA_EXIT}). All gates fall back to cloud models. Reason: ${OLLAMA_RESULT}"`
+- Also log: `"  → LiteLLM URL: ${LITELLM_BASE_URL:-http://localhost:8000}, Key: ${LITELLM_MASTER_KEY:+set}${LITELLM_MASTER_KEY:-unset}"`
+
+**Model Routing Summary** (print in startup banner):
+```
+Model routing for this session:
+  Wave planning: ${ollamaAvailable ? "free (Ollama)" : "haiku (cloud)"}
+  Gate 1 PLAN:   ${ollamaAvailable ? "free (Ollama)" : "haiku (cloud)"}
+  Gate 2 IMPL:   haiku (cloud) — escalates to sonnet on failure
+  Gate 3 LINT:   haiku (cloud)
+  Gate 4 REVIEW: sonnet (cloud)
+  Gate 5 COMMIT: ${ollamaAvailable ? "free (Ollama)" : "template fallback"}
+  Escalation:    inherits parent on ARCH/SECURITY/high-complexity
+```
 
 ---
 
@@ -254,8 +284,9 @@ Scan `~/.claude/plugins/` for superpowers (TDD, debugging, verification, code-re
 
 Read ticket metadata (IDs, priorities, affected files) — do NOT output analysis inline.
 
-# Try Ollama first (free)
+# Try Ollama first (free) — tags enable per-ticket cost analysis in LiteLLM spend logs
 WAVE_JSON=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free \
+  --tag "gate:wave-plan" --tag "session:${SESSION_ID:-$(date +%s)}" \
   --system "You analyze tickets and return wave plans as JSON. No explanations." \
   --user "Tickets (id, priority, affected_files):
 {ticket_metadata_list}
@@ -416,6 +447,7 @@ Generate commit message via Ollama (free), template fallback:
 
 ```bash
 COMMIT_MSG=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free \
+  --tag "ticket:{ticket_id}" --tag "gate:commit" \
   --system "Generate a git commit message in Conventional Commits format. Return ONLY the message, no explanation." \
   --user "Type: {type}, Area: {area}, Ticket: {ticket_id}, Changes: {summary}")
 
@@ -501,6 +533,8 @@ Entry to append:
 - Agents: {agent_breakdown} | LLM overrides: {count}
 - Findings: {total} ({filtered} filtered) | Avg confidence: {avg}%
 - Tokens: {wave_total_tokens} | Cost: ${wave_cost_usd} | Session total: ${session_total_cost_usd}
+- Models used: {model_breakdown} (e.g. "free:3, haiku:8, sonnet:4, opus:0")
+- Ollama calls: {ollama_success}/{ollama_total} ({ollama_fallback} fell back to cloud)
 
 After writing, return ONLY:
 {"file": ".backlog-ops/wave-log.md", "lines": N, "status": "ok"}
@@ -513,6 +547,7 @@ After receiving JSON, print this banner:
 ```
 ═══ WAVE {N} COMPLETE ═══
 Tickets: {completed}/{attempted} | Tests: +{N} | Cost: ${wave_cost_usd}
+Models: free:{N} haiku:{N} sonnet:{N} opus:{N} | Ollama: {ok}/{total}
 Remaining: {pending_count} | Session total: ${session_total_cost_usd}
 Cache hit rate: {avg_cache_hit_rate}% | Waves this session: {wavesThisSession}/{sessionMaxWaves}
 ══════════════════════════

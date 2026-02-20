@@ -16,7 +16,8 @@ This skill runs inside a target project that has been initialized with `backlog-
 
 ```
 model: "sonnet"  → write-agents: ticket file creation, cost section generation
-no model:        → analysis agents: code review, gap detection — inherits parent
+model: "haiku"   → analysis agents: codebase scanning, gap detection, duplicate check
+NEVER omit model: — parent may be Opus/Sonnet; always set explicitly.
 ```
 
 ## OUTPUT DISCIPLINE
@@ -301,9 +302,9 @@ Use current pricing (per 1M tokens):
 
 | Model | Input $/1M | Output $/1M |
 |-------|-----------|------------|
-| Claude Opus 4 | $15.00 | $75.00 |
-| Claude Sonnet 4 | $3.00 | $15.00 |
-| Claude Haiku 3.5 | $0.80 | $4.00 |
+| Claude Opus 4 | $5.50 | $27.50 |
+| Claude Sonnet 4 | $3.30 | $16.50 |
+| Claude Haiku 3.5 | $1.10 | $5.50 |
 
 ```
 cost = (input_tokens / 1_000_000 * input_price) + (output_tokens / 1_000_000 * output_price)
