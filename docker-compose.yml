@@ -55,6 +55,7 @@ services:
       # SSL verification disabled — corporate TLS inspection (Zscaler) uses a CA cert
       # that Python 3.13 rejects (Basic Constraints not marked critical per RFC 5280).
       SSL_VERIFY: "False"
+      PYTHONPATH: /app/callbacks
       CURL_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
     ports:
@@ -63,6 +64,8 @@ services:
       - ./config/litellm/proxy-config.docker.yaml:/app/config.yaml:ro
       - ./config/litellm/model_prices_patched.json:/app/litellm/model_prices_and_context_window_backup.json:ro
       - ./docker/certs/ca-bundle.crt:/etc/ssl/certs/ca-certificates.crt:ro
+      - ./config/litellm/callbacks:/app/callbacks:ro
+      - ${HOME}/.backlog-toolkit:/root/.backlog-toolkit:ro
     command: ["--config", "/app/config.yaml", "--detailed_debug"]
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/readiness')\" || exit 1"]
