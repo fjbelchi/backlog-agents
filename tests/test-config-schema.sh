@@ -70,7 +70,7 @@ echo ""
 
 echo "-- Top-level keys --"
 
-TOP_KEYS=(version project backlog qualityGates codeRules ticketValidation agentRouting reviewPipeline)
+TOP_KEYS=(version project backlog qualityGates codeRules ticketValidation agentRouting reviewPipeline audit)
 
 for key in "${TOP_KEYS[@]}"; do
   if python3 -c "
@@ -311,6 +311,78 @@ assert sys.argv[2] in d['llmOps']['cachePolicy']
     pass "llmOps.cachePolicy.${key} present"
   else
     fail "llmOps.cachePolicy.${key} missing"
+  fi
+done
+
+echo ""
+
+# ── audit schema checks ─────────────────────────────────────────────
+
+echo "-- audit schema --"
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+assert 'audit' in s['properties']
+" "$SCHEMA" 2>/dev/null; then
+  pass "audit section exists in schema"
+else
+  fail "audit section missing from schema"
+fi
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+assert s['properties']['audit']['properties']['prescan']['properties']['extensions']['type'] == 'array'
+" "$SCHEMA" 2>/dev/null; then
+  pass "audit.prescan.extensions is an array"
+else
+  fail "audit.prescan.extensions is not an array"
+fi
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+dims = s['properties']['audit']['properties']['dimensions']
+assert dims['items']['type'] == 'string'
+assert 'enum' in dims['items']
+" "$SCHEMA" 2>/dev/null; then
+  pass "audit.dimensions has enum constraint"
+else
+  fail "audit.dimensions does not have enum constraint"
+fi
+
+echo ""
+
+# ── audit preset sub-keys ───────────────────────────────────────────
+
+echo "-- audit preset sub-keys --"
+
+for key in enabled prescan dimensions ragDeduplication ticketMapping; do
+  if python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert sys.argv[2] in d['audit']
+" "$PRESET" "$key" 2>/dev/null; then
+    pass "audit.${key} present"
+  else
+    fail "audit.${key} missing"
+  fi
+done
+
+echo ""
+
+echo "-- audit.prescan sub-keys --"
+
+for key in extensions excludeDirs maxFunctionLines coverageThreshold complexityThreshold; do
+  if python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert sys.argv[2] in d['audit']['prescan']
+" "$PRESET" "$key" 2>/dev/null; then
+    pass "audit.prescan.${key} present"
+  else
+    fail "audit.prescan.${key} missing"
   fi
 done
 
