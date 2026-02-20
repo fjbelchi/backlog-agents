@@ -53,9 +53,29 @@ Never generate more than 50 lines of file content per tool call.
 
 ---
 
-## Configuration
+## Prompt Caching Strategy
 
-All project-specific values come from `backlog.config.json` at project root.
+This skill is structured for maximum prompt cache efficiency:
+```
+STATIC PREFIX (cached — never changes between projects or sessions):
+  Frontmatter → Model Rules → Output Discipline → Chunking Rule →
+  Cost-Aware Execution → Team Composition → Main Loop → Phases →
+  Iron Laws → Context Management → Constraints
+
+DYNAMIC SUFFIX (appended at runtime in Phase 0 — project-specific):
+  Config values → Code Rules content → State → Ticket data
+```
+
+**Rules for cache preservation:**
+1. NEVER modify the static prefix sections during a session
+2. All project-specific data is read in Phase 0 and passed via conversation messages
+3. State updates between waves go in messages, not re-reads of the skill prompt
+4. Model switching happens via subagents (Task tool), never mid-session
+5. Tool set (allowed-tools) is fixed — never conditionally add/remove tools
+
+## Configuration Reference
+
+Config keys read from `backlog.config.json` at runtime (Phase 0). Defaults in parentheses:
 
 ```
 backlog.dataDir (backlog/data) | backlog.ticketPrefixes (["FEAT","BUG","SEC"])
@@ -66,9 +86,10 @@ reviewPipeline.reviewers (2: spec+quality) | reviewPipeline.confidenceThreshold 
 llmOps.routing: entryModelImplement (balanced) | entryModelReview (cheap) | escalationRules ([])
 llmOps.batchPolicy ({forceBatchWhenQueueOver: 1})
 llmOps.ragPolicy: enabled (false) | serverUrl (http://localhost:8001)
+llmOps.cachePolicy: warnBelowHitRate (0.80) | sessionMaxWaves (5)
 ```
 
-**At startup**: Read `backlog.config.json`. If `codeRules.source` is set, read that file -- its full content is included in every implementer prompt.
+**Config is read ONLY in Phase 0** — not at skill load time. This keeps the prompt prefix 100% static and cacheable across all projects.
 
 ---
 
@@ -144,12 +165,20 @@ Success: stats.localModelStats.successCount++, totalAttempts++
 
 If `config.llmOps.ragPolicy.enabled`: query `{serverUrl}/search` with ticket description, get top-K snippets (~800 tokens vs ~3k full files), use in prompt instead of full file reads. If unreachable, fall back to direct reads without error.
 
-### Cost Ledger
+### Cost & Cache Ledger
 
 After each gate, append to `.backlog-ops/usage-ledger.jsonl`:
 ```json
-{"ticket_id": "FEAT-001", "gate": "implement", "model": "balanced", "input_tokens": 1200, "output_tokens": 800, "date": "2026-02-19"}
+{"ticket_id": "FEAT-001", "gate": "implement", "model": "balanced", "input_tokens": 1200, "output_tokens": 800, "cache_read_tokens": 1050, "cache_creation_tokens": 150, "cache_hit_rate": 0.88, "cost_usd": 0.0156, "date": "2026-02-19"}
 ```
+
+**Cache fields** (extract from LiteLLM response headers or Task metadata):
+- `cache_read_tokens`: tokens served from cache (header: `x-litellm-cache-read-input-tokens`)
+- `cache_creation_tokens`: tokens written to cache (header: `x-litellm-cache-creation-input-tokens`)
+- `cache_hit_rate`: `cache_read_tokens / input_tokens` (0.0-1.0). If headers unavailable, set to `null`.
+- `cost_usd`: actual cost from `x-litellm-response-cost` header, or calculated from tokens
+
+**Cache health monitoring**: The Phase 0 startup reads the last 10 ledger entries and warns if average cache_hit_rate drops below threshold. This catches prompt/tool changes that silently break cache.
 
 ---
 
@@ -186,22 +215,32 @@ Read prefixes from `config.backlog.ticketPrefixes`. Default: SEC->P0, BUG->P1, Q
 ## MAIN LOOP
 
 ```
-PHASE 0: STARTUP → read config + codeRules + state, count pending, check batch threshold, check RAG health, run health check, show banner
+PHASE 0: STARTUP → load config + codeRules + state (dynamic context), cache health check, show banner
 PHASE 0.5: DETECT CAPABILITIES → scan plugins + MCP servers, log capabilities
-WHILE pending_tickets_exist(): cycle++
+WHILE pending_tickets_exist() AND wavesThisSession < sessionMaxWaves: cycle++
   PHASE 1: WAVE SELECTION → top 10 by priority, analyze blast radius, select 2-3 compatible slots
   PHASE 2: CREATE TEAM → TeamCreate, spawn implementers + reviewer + investigator
   PHASE 3: ORCHESTRATE → per ticket: 3a PLAN → 3b IMPLEMENT (TDD) → 3c LINT → 3d REVIEW → 3e COMMIT
   PHASE 4: VERIFY & ENRICH & MOVE → git log -1 confirms, enrich ticket, mv to completed/
   PHASE 5: CLEANUP → shutdown teammates, TeamDelete, save state
-  PHASE 6: WAVE SUMMARY → delegate log to sonnet write-agent, print banner
+  PHASE 6: WAVE SUMMARY → delegate log to write-agent, print banner, check session limits
+IF pending_tickets_exist() AND wavesThisSession >= sessionMaxWaves:
+  → save state, print "Session wave limit reached. Run /backlog-toolkit:implementer to continue."
 ```
 
 ---
 
-## Phase 0: Startup
+## Phase 0: Startup (Dynamic Context Loading)
 
-Read `backlog.config.json`, load `.claude/implementer-state.json`, count pending tickets in `{dataDir}/pending/*.md`, run health check if configured. If `state.version != "6.1"` or state missing, run: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/migrate-state.py"`
+All project-specific data is loaded here — NOT at skill prompt load time. This keeps the cached prefix stable.
+
+1. Read `backlog.config.json` → store all values in working memory
+2. If `codeRules.source` is set → read that file, store full content for injection into implementer prompts
+3. Load `.claude/implementer-state.json` (if `state.version != "6.1"` or missing, run: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/migrate-state.py"`)
+4. Count pending tickets in `{dataDir}/pending/*.md`
+5. Run health check if `healthCheckCommand` is configured
+6. **Cache health check**: if `usage-ledger.jsonl` exists, read last 10 entries. If average `cache_hit_rate` < `config.llmOps.cachePolicy.warnBelowHitRate` (default: 0.80), log: `⚠ Cache hit rate {rate}% below threshold. Check for prompt/tool changes.`
+7. Show startup banner with stats
 
 ---
 
@@ -304,16 +343,26 @@ If an external skill was detected in Phase 0.5 for the same discipline, prefer t
 
 Min 3 tests per ticket: 1 happy path (main flow) + 1 error path (invalid inputs, auth) + 1 edge case (boundary, empty, null). Order: failing tests -> minimal code -> tests pass.
 
-**Code Rules Injection**: The leader MUST include this in each implementer prompt:
+**Prompt Construction (cache-optimized)**:
+
+The leader constructs implementer prompts using a static prefix + dynamic suffix pattern:
 
 ```
-CODE RULES — MANDATORY COMPLIANCE
-Read from: {config.codeRules.source}
+1. STATIC PREFIX: Read templates/implementer-prefix.md (identical for ALL implementers)
+   Contains: role, TDD protocol, context rules, Iron Laws
+   → This prefix is cached by Anthropic API after the first subagent call.
+     Subsequent implementers in the same wave get ~90% cache hit on this prefix.
 
-{FULL CONTENT OF THE CODE RULES FILE}
-
-HARD GATES (block commit): {config.codeRules.hardGates}
-SOFT GATES (review + justify): {config.codeRules.softGates}
+2. DYNAMIC SUFFIX (appended after prefix, in this order):
+   a. CODE RULES — MANDATORY COMPLIANCE
+      Read from: {config.codeRules.source}
+      {FULL CONTENT OF THE CODE RULES FILE}
+      HARD GATES (block commit): {config.codeRules.hardGates}
+      SOFT GATES (review + justify): {config.codeRules.softGates}
+   b. CATALOG DISCIPLINES (CAT-TDD + type-specific catalogs)
+   c. RAG CONTEXT (recurring patterns + code snippets, if available)
+   d. TICKET CONTENT (the full ticket .md)
+   e. GATE-SPECIFIC INSTRUCTIONS
 ```
 
 If `codeRules.source` is not configured, skip code rules injection but still enforce TDD and Iron Laws.
@@ -335,8 +384,23 @@ Run on affected files: `typeCheckCommand` (0 errors), `lintCommand` (0 warnings)
 
 Read reviewers from `config.reviewPipeline.reviewers`. Default: 2 reviewers.
 
-**Spawn reviewers in parallel** as team members:
-- Each reviewer receives: changed files, project code rules, CAT-REVIEW catalog
+**Spawn reviewers in parallel** as team members using cache-optimized prompts:
+
+```
+Reviewer prompt construction:
+1. STATIC PREFIX: Read templates/reviewer-prefix.md (identical for ALL reviewers)
+   Contains: role, review protocol, focus types, standards, scoring, output format
+   → Cached after first reviewer call. Subsequent reviewers get ~90% cache hit.
+
+2. DYNAMIC SUFFIX (appended after prefix):
+   a. CODE RULES (from config)
+   b. CAT-REVIEW catalog discipline
+   c. CHANGED FILES (diff or full content of modified files)
+   d. TICKET CONTEXT (acceptance criteria from ticket .md)
+   e. FOCUS ASSIGNMENT: "Your focus: {focus_type}"
+   f. PREVIOUS FINDINGS (if re-review: include prior round findings)
+```
+
 - Each reviewer evaluates from their configured `focus` perspective
 - Each reviewer scores findings 0-100 confidence
 
@@ -392,13 +456,13 @@ After commit, perform three actions: enrich ticket, track costs, move to complet
 
 Update frontmatter: `status: completed, completed: {date}, implemented_by: backlog-implementer-v7, review_rounds, tests_added, files_changed, commit: {hash}`. Add sections: Plan, Tests, Review Rounds, Lint Gate results, Commit info.
 
-### 4.2 Track Actual Cost
+### 4.2 Track Actual Cost & Cache Efficiency
 
-**Token collection**: Capture `total_tokens` and `tool_uses` from each subagent's Task response metadata. Track per ticket by gate (plan/implement/lint/review/commit) with total_input, total_output, total.
+**Token collection**: Capture `total_tokens`, `tool_uses`, and cache metrics from each subagent's Task response metadata. Track per ticket by gate (plan/implement/lint/review/commit) with total_input, total_output, total, cache_read_tokens, cache_hit_rate.
 
-**Cost calculation** — Pricing ($/MTok): Opus in=$15/out=$75, Sonnet in=$3/out=$15, Haiku in=$0.80/out=$4. Detect model used (default Opus 4). `cost_usd = (total_input / 1M * in_price) + (total_output / 1M * out_price)`
+**Cost calculation** — Pricing ($/MTok): Opus in=$15/out=$75, Sonnet in=$3/out=$15, Haiku in=$0.80/out=$4. Detect model used (default Opus 4). `cost_usd = (total_input / 1M * in_price) + (total_output / 1M * out_price)`. Cache reduces effective input cost: cached tokens cost 90% less on Anthropic API.
 
-**Add `## Actual Cost` section to completed ticket** with: model, input/output/total tokens, cost_usd, review rounds, lint retries, and a breakdown-by-phase table (plan/implement/lint/review/commit with tokens and %). If ticket had a `## Cost Estimate`, calculate `estimate_accuracy = 1 - abs(actual - estimated) / estimated` and append estimated cost + accuracy.
+**Add `## Actual Cost` section to completed ticket** with: model, input/output/total tokens, cache_hit_rate, cost_usd, review rounds, lint retries, and a breakdown-by-phase table (plan/implement/lint/review/commit with tokens, cache%, and cost). If ticket had a `## Cost Estimate`, calculate `estimate_accuracy = 1 - abs(actual - estimated) / estimated` and append estimated cost + accuracy.
 
 ### 4.3 Update Cost History
 
@@ -416,9 +480,9 @@ SendMessage `shutdown_request` to each teammate, wait for response. TeamDelete()
 
 ---
 
-## Phase 6: Wave Summary
+## Phase 6: Wave Summary & Session Management
 
-Delegate log writing to a sonnet write-agent, then print a 5-line banner.
+Delegate log writing to a write-agent, check session limits, then print banner.
 
 ```
 Task(
@@ -450,7 +514,27 @@ After receiving JSON, print this banner:
 ═══ WAVE {N} COMPLETE ═══
 Tickets: {completed}/{attempted} | Tests: +{N} | Cost: ${wave_cost_usd}
 Remaining: {pending_count} | Session total: ${session_total_cost_usd}
+Cache hit rate: {avg_cache_hit_rate}% | Waves this session: {wavesThisSession}/{sessionMaxWaves}
 ══════════════════════════
+```
+
+### Session Limit Check (Cache-Safe Compaction Avoidance)
+
+After each wave summary, check if the session should yield to a fresh session:
+
+```
+wavesThisSession++
+
+IF wavesThisSession >= config.llmOps.cachePolicy.sessionMaxWaves (default: 5):
+  1. Save state to .claude/implementer-state.json (includes completedThisSession, currentWave, stats)
+  2. Print: "⏸ Session wave limit ({sessionMaxWaves}) reached. {pending_count} tickets remaining."
+  3. Print: "Run /backlog-toolkit:implementer to continue in a fresh session with full cache."
+  4. EXIT loop — do NOT continue to next wave
+
+WHY: Long sessions (>5 waves) risk context compaction, which rebuilds the cache prefix
+and loses the ~98% cache hit rate. Breaking into sessions preserves cache efficiency.
+Each new session loads the same static SKILL.md prefix → immediate cache hits.
+State continuity is guaranteed via implementer-state.json.
 ```
 
 ---
@@ -461,9 +545,11 @@ State schema v6.1: see `.claude/implementer-state.json` (auto-created by `migrat
 
 ---
 
-## ⚖️ IRON LAWS (include VERBATIM in EVERY implementer prompt)
+## ⚖️ IRON LAWS (included via templates/implementer-prefix.md)
 
-These 2 laws have ABSOLUTE priority over any other instruction. The leader MUST include this block in every implementer prompt. Violating these laws results in immediate teammate termination.
+These 2 laws have ABSOLUTE priority over any other instruction. They are included in `templates/implementer-prefix.md` which is the static prefix for every implementer prompt. Violating these laws results in immediate teammate termination.
+
+> **Note**: The canonical source of Iron Laws is `templates/implementer-prefix.md`. The copy below is for leader reference. Do NOT duplicate into subagent prompts manually — the template handles it.
 
 ```
 ═══════════════════════════════════════════════════════════════════════
@@ -512,7 +598,9 @@ but "what is it telling me is wrong with my code?"
 ═══════════════════════════════════════════════════════════════════════
 ```
 
-### Context Management (include in EVERY implementer prompt)
+### Context Management (included via templates/implementer-prefix.md)
+
+> Canonical source: `templates/implementer-prefix.md`. Repeated here for leader reference.
 
 ```
 CONTEXT RULES — keep context lean to reduce cost:

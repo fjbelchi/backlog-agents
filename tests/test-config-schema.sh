@@ -296,6 +296,24 @@ assert sys.argv[2] in d['llmOps']['routing']
   fi
 done
 
+# ── llmOps.cachePolicy sub-keys ──────────────────────────────────────
+
+echo "-- llmOps.cachePolicy sub-keys --"
+
+CACHE_KEYS=(warnBelowHitRate sessionMaxWaves)
+
+for key in "${CACHE_KEYS[@]}"; do
+  if python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert sys.argv[2] in d['llmOps']['cachePolicy']
+" "$PRESET" "$key" 2>/dev/null; then
+    pass "llmOps.cachePolicy.${key} present"
+  else
+    fail "llmOps.cachePolicy.${key} missing"
+  fi
+done
+
 echo ""
 
 # ── Summary ──────────────────────────────────────────────────────────

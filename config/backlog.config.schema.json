@@ -442,6 +442,19 @@
                   "default": 0.88
                 }
               }
+            },
+            "warnBelowHitRate": {
+              "type": "number",
+              "description": "Warn in Phase 0 if average prompt cache hit rate drops below this threshold (0.0-1.0).",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.80
+            },
+            "sessionMaxWaves": {
+              "type": "integer",
+              "description": "Max waves per implementer session before yielding to a fresh session. Prevents context compaction from breaking cache.",
+              "minimum": 1,
+              "default": 5
             }
           }
         },
