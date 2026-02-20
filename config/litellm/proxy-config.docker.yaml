@@ -80,8 +80,54 @@ model_list:
       cache_creation_input_token_cost: 0.000006875
 
   # ─── Claude Code aliases ─────────────────────────────────────────────
-  # Claude Code sends these model names. Route them to the same backends
-  # so Claude Code works transparently through the proxy.
+  # Claude Code sends model names in two formats:
+  #   1. Short form:   claude-sonnet-4-6 (from model: setting)
+  #   2. Bedrock form:  us.anthropic.claude-sonnet-4-6 (from internal resolution)
+  # Both must be aliased with explicit pricing for spend tracking to work.
+  # Without explicit pricing, LiteLLM's cache cost calculation returns $0.
+
+  - model_name: us.anthropic.claude-sonnet-4-6
+    litellm_params:
+      model: bedrock/us.anthropic.claude-sonnet-4-6
+      aws_region_name: us-west-2
+      input_cost_per_token: 0.0000033
+      output_cost_per_token: 0.0000165
+      cache_read_input_token_cost: 0.00000033
+      cache_creation_input_token_cost: 0.000004125
+    model_info:
+      input_cost_per_token: 0.0000033
+      output_cost_per_token: 0.0000165
+      cache_read_input_token_cost: 0.00000033
+      cache_creation_input_token_cost: 0.000004125
+
+  - model_name: us.anthropic.claude-opus-4-6-v1
+    litellm_params:
+      model: bedrock/us.anthropic.claude-opus-4-6-v1
+      aws_region_name: us-east-1
+      input_cost_per_token: 0.0000055
+      output_cost_per_token: 0.0000275
+      cache_read_input_token_cost: 0.00000055
+      cache_creation_input_token_cost: 0.000006875
+    model_info:
+      input_cost_per_token: 0.0000055
+      output_cost_per_token: 0.0000275
+      cache_read_input_token_cost: 0.00000055
+      cache_creation_input_token_cost: 0.000006875
+
+  - model_name: us.anthropic.claude-haiku-4-5-20251001-v1:0
+    litellm_params:
+      model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
+      aws_region_name: us-west-2
+      input_cost_per_token: 0.0000011
+      output_cost_per_token: 0.0000055
+      cache_read_input_token_cost: 0.00000011
+      cache_creation_input_token_cost: 0.000001375
+    model_info:
+      input_cost_per_token: 0.0000011
+      output_cost_per_token: 0.0000055
+      cache_read_input_token_cost: 0.00000011
+      cache_creation_input_token_cost: 0.000001375
+
   - model_name: claude-sonnet-4-6
     litellm_params:
       model: bedrock/us.anthropic.claude-sonnet-4-6
@@ -175,6 +221,8 @@ router_settings:
     - claude-haiku-4-5: [claude-sonnet-4-6, claude-opus-4-6]
     - claude-haiku-4-5-20251001: [claude-sonnet-4-6, claude-opus-4-6]
     - claude-sonnet-4-6: [claude-opus-4-6]
+    - us.anthropic.claude-haiku-4-5-20251001-v1:0: [us.anthropic.claude-sonnet-4-6, us.anthropic.claude-opus-4-6-v1]
+    - us.anthropic.claude-sonnet-4-6: [us.anthropic.claude-opus-4-6-v1]
   # Context window overflow → step up to bigger model
   context_window_fallbacks:
     - free: [cheap]
@@ -183,11 +231,14 @@ router_settings:
     - claude-haiku-4-5: [claude-sonnet-4-6]
     - claude-haiku-4-5-20251001: [claude-sonnet-4-6]
     - claude-sonnet-4-6: [claude-opus-4-6]
+    - us.anthropic.claude-haiku-4-5-20251001-v1:0: [us.anthropic.claude-sonnet-4-6]
+    - us.anthropic.claude-sonnet-4-6: [us.anthropic.claude-opus-4-6-v1]
   # Content policy rejection → try alternate provider
   content_policy_fallbacks:
     - cheap: [balanced]
     - claude-haiku-4-5: [claude-sonnet-4-6]
     - claude-haiku-4-5-20251001: [claude-sonnet-4-6]
+    - us.anthropic.claude-haiku-4-5-20251001-v1:0: [us.anthropic.claude-sonnet-4-6]
   # Cooldown failed providers
   allowed_fails: 3
   cooldown_time: 60
