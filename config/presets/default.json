@@ -177,5 +177,25 @@
       "techDebt": "TASK",
       "architecture": "TASK"
     }
+  },
+  "audit": {
+    "enabled": true,
+    "prescan": {
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".py"],
+      "excludeDirs": ["node_modules", "dist", "coverage", ".next", "__pycache__", ".git"],
+      "maxFunctionLines": 80,
+      "coverageThreshold": 70,
+      "complexityThreshold": 10
+    },
+    "dimensions": ["architecture", "security", "bugs", "performance", "tests", "hygiene"],
+    "ragDeduplication": true,
+    "ticketMapping": {
+      "security": "SEC",
+      "bugs": "BUG",
+      "architecture": "TASK",
+      "performance": "TASK",
+      "tests": "TEST",
+      "hygiene": "QUALITY"
+    }
   }
 }

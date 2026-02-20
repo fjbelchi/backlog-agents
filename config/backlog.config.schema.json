@@ -626,6 +626,54 @@
           }
         }
       }
+    },
+    "audit": {
+      "type": "object",
+      "description": "Full project health audit configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "prescan": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "extensions": {
+              "type": "array",
+              "items": { "type": "string" },
+              "default": [".ts", ".tsx", ".js", ".jsx", ".py"]
+            },
+            "excludeDirs": {
+              "type": "array",
+              "items": { "type": "string" },
+              "default": ["node_modules", "dist", "coverage", ".next", "__pycache__", ".git"]
+            },
+            "maxFunctionLines": { "type": "integer", "default": 80 },
+            "coverageThreshold": { "type": "integer", "minimum": 0, "maximum": 100, "default": 70 },
+            "complexityThreshold": { "type": "integer", "minimum": 1, "default": 10 }
+          }
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["architecture", "security", "bugs", "performance", "tests", "hygiene"]
+          },
+          "default": ["architecture", "security", "bugs", "performance", "tests", "hygiene"]
+        },
+        "ragDeduplication": { "type": "boolean", "default": true },
+        "ticketMapping": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "default": {
+            "security": "SEC",
+            "bugs": "BUG",
+            "architecture": "TASK",
+            "performance": "TASK",
+            "tests": "TEST",
+            "hygiene": "QUALITY"
+          }
+        }
+      }
     }
   }
 }
