@@ -33,50 +33,51 @@ model_list:
       output_cost_per_token: 0
 
   # CHEAP — 70% of calls: classification, triage, review, lint, drafts
+  # Pricing: Bedrock cross-region inference profiles have 10% markup over direct Anthropic.
   # Pricing in litellm_params = spend tracking; model_info = UI display
   - model_name: cheap
     litellm_params:
       model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
       aws_region_name: us-west-2
-      input_cost_per_token: 0.000001                 # $1/MTok
-      output_cost_per_token: 0.000005                # $5/MTok
-      cache_read_input_token_cost: 0.0000001         # $0.10/MTok
-      cache_creation_input_token_cost: 0.00000125    # $1.25/MTok
+      input_cost_per_token: 0.0000011                # $1.10/MTok (Bedrock cross-region)
+      output_cost_per_token: 0.0000055               # $5.50/MTok
+      cache_read_input_token_cost: 0.00000011        # $0.11/MTok
+      cache_creation_input_token_cost: 0.000001375   # $1.375/MTok
     model_info:
-      input_cost_per_token: 0.000001
-      output_cost_per_token: 0.000005
-      cache_read_input_token_cost: 0.0000001
-      cache_creation_input_token_cost: 0.00000125
+      input_cost_per_token: 0.0000011
+      output_cost_per_token: 0.0000055
+      cache_read_input_token_cost: 0.00000011
+      cache_creation_input_token_cost: 0.000001375
 
   # BALANCED — 25% of calls: implementation, code generation, complex analysis
   - model_name: balanced
     litellm_params:
       model: bedrock/us.anthropic.claude-sonnet-4-6
       aws_region_name: us-west-2
-      input_cost_per_token: 0.000003                 # $3/MTok
-      output_cost_per_token: 0.000015                # $15/MTok
-      cache_read_input_token_cost: 0.0000003         # $0.30/MTok
-      cache_creation_input_token_cost: 0.00000375    # $3.75/MTok
+      input_cost_per_token: 0.0000033                # $3.30/MTok (Bedrock cross-region)
+      output_cost_per_token: 0.0000165               # $16.50/MTok
+      cache_read_input_token_cost: 0.00000033        # $0.33/MTok
+      cache_creation_input_token_cost: 0.000004125   # $4.125/MTok
     model_info:
-      input_cost_per_token: 0.000003
-      output_cost_per_token: 0.000015
-      cache_read_input_token_cost: 0.0000003
-      cache_creation_input_token_cost: 0.00000375
+      input_cost_per_token: 0.0000033
+      output_cost_per_token: 0.0000165
+      cache_read_input_token_cost: 0.00000033
+      cache_creation_input_token_cost: 0.000004125
 
   # FRONTIER — 5% of calls: complex architecture, security audit, escalation
   - model_name: frontier
     litellm_params:
       model: bedrock/us.anthropic.claude-opus-4-6-v1
       aws_region_name: us-east-1
-      input_cost_per_token: 0.000005                 # $5/MTok
-      output_cost_per_token: 0.000025                # $25/MTok
-      cache_read_input_token_cost: 0.0000005         # $0.50/MTok
-      cache_creation_input_token_cost: 0.00000625    # $6.25/MTok
+      input_cost_per_token: 0.0000055                # $5.50/MTok (Bedrock cross-region)
+      output_cost_per_token: 0.0000275               # $27.50/MTok
+      cache_read_input_token_cost: 0.00000055        # $0.55/MTok
+      cache_creation_input_token_cost: 0.000006875   # $6.875/MTok
     model_info:
-      input_cost_per_token: 0.000005
-      output_cost_per_token: 0.000025
-      cache_read_input_token_cost: 0.0000005
-      cache_creation_input_token_cost: 0.00000625
+      input_cost_per_token: 0.0000055
+      output_cost_per_token: 0.0000275
+      cache_read_input_token_cost: 0.00000055
+      cache_creation_input_token_cost: 0.000006875
 
   # ─── Claude Code aliases ─────────────────────────────────────────────
   # Claude Code sends these model names. Route them to the same backends
@@ -85,58 +86,58 @@ model_list:
     litellm_params:
       model: bedrock/us.anthropic.claude-sonnet-4-6
       aws_region_name: us-west-2
-      input_cost_per_token: 0.000003
-      output_cost_per_token: 0.000015
-      cache_read_input_token_cost: 0.0000003
-      cache_creation_input_token_cost: 0.00000375
+      input_cost_per_token: 0.0000033
+      output_cost_per_token: 0.0000165
+      cache_read_input_token_cost: 0.00000033
+      cache_creation_input_token_cost: 0.000004125
     model_info:
-      input_cost_per_token: 0.000003
-      output_cost_per_token: 0.000015
-      cache_read_input_token_cost: 0.0000003
-      cache_creation_input_token_cost: 0.00000375
+      input_cost_per_token: 0.0000033
+      output_cost_per_token: 0.0000165
+      cache_read_input_token_cost: 0.00000033
+      cache_creation_input_token_cost: 0.000004125
 
   - model_name: claude-opus-4-6
     litellm_params:
       model: bedrock/us.anthropic.claude-opus-4-6-v1
       aws_region_name: us-east-1
-      input_cost_per_token: 0.000005
-      output_cost_per_token: 0.000025
-      cache_read_input_token_cost: 0.0000005
-      cache_creation_input_token_cost: 0.00000625
+      input_cost_per_token: 0.0000055
+      output_cost_per_token: 0.0000275
+      cache_read_input_token_cost: 0.00000055
+      cache_creation_input_token_cost: 0.000006875
     model_info:
-      input_cost_per_token: 0.000005
-      output_cost_per_token: 0.000025
-      cache_read_input_token_cost: 0.0000005
-      cache_creation_input_token_cost: 0.00000625
+      input_cost_per_token: 0.0000055
+      output_cost_per_token: 0.0000275
+      cache_read_input_token_cost: 0.00000055
+      cache_creation_input_token_cost: 0.000006875
 
   - model_name: claude-haiku-4-5
     litellm_params:
       model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
       aws_region_name: us-west-2
-      input_cost_per_token: 0.000001
-      output_cost_per_token: 0.000005
-      cache_read_input_token_cost: 0.0000001
-      cache_creation_input_token_cost: 0.00000125
+      input_cost_per_token: 0.0000011
+      output_cost_per_token: 0.0000055
+      cache_read_input_token_cost: 0.00000011
+      cache_creation_input_token_cost: 0.000001375
     model_info:
-      input_cost_per_token: 0.000001
-      output_cost_per_token: 0.000005
-      cache_read_input_token_cost: 0.0000001
-      cache_creation_input_token_cost: 0.00000125
+      input_cost_per_token: 0.0000011
+      output_cost_per_token: 0.0000055
+      cache_read_input_token_cost: 0.00000011
+      cache_creation_input_token_cost: 0.000001375
 
   # Claude Code also sends the dated variant of Haiku
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
       aws_region_name: us-west-2
-      input_cost_per_token: 0.000001
-      output_cost_per_token: 0.000005
-      cache_read_input_token_cost: 0.0000001
-      cache_creation_input_token_cost: 0.00000125
+      input_cost_per_token: 0.0000011
+      output_cost_per_token: 0.0000055
+      cache_read_input_token_cost: 0.00000011
+      cache_creation_input_token_cost: 0.000001375
     model_info:
-      input_cost_per_token: 0.000001
-      output_cost_per_token: 0.000005
-      cache_read_input_token_cost: 0.0000001
-      cache_creation_input_token_cost: 0.00000125
+      input_cost_per_token: 0.0000011
+      output_cost_per_token: 0.0000055
+      cache_read_input_token_cost: 0.00000011
+      cache_creation_input_token_cost: 0.000001375
 
 # ─── Alternative: Direct Anthropic API ──────────────────────────────
 # Uncomment these and comment out Bedrock models above to use Anthropic directly

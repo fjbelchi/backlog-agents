@@ -460,7 +460,7 @@ Update frontmatter: `status: completed, completed: {date}, implemented_by: backl
 
 **Token collection**: Capture `total_tokens`, `tool_uses`, and cache metrics from each subagent's Task response metadata. Track per ticket by gate (plan/implement/lint/review/commit) with total_input, total_output, total, cache_read_tokens, cache_hit_rate.
 
-**Cost calculation** — Pricing ($/MTok): Opus in=$15/out=$75, Sonnet in=$3/out=$15, Haiku in=$0.80/out=$4. Detect model used (default Opus 4). `cost_usd = (total_input / 1M * in_price) + (total_output / 1M * out_price)`. Cache reduces effective input cost: cached tokens cost 90% less on Anthropic API.
+**Cost calculation** — Bedrock cross-region pricing ($/MTok): Opus in=$5.50/out=$27.50, Sonnet in=$3.30/out=$16.50, Haiku in=$1.10/out=$5.50. `cost_usd = (total_input / 1M * in_price) + (total_output / 1M * out_price)`. Cache reduces effective input cost: cached tokens cost 90% less on Anthropic API.
 
 **Add `## Actual Cost` section to completed ticket** with: model, input/output/total tokens, cache_hit_rate, cost_usd, review rounds, lint retries, and a breakdown-by-phase table (plan/implement/lint/review/commit with tokens, cache%, and cost). If ticket had a `## Cost Estimate`, calculate `estimate_accuracy = 1 - abs(actual - estimated) / estimated` and append estimated cost + accuracy.
 
