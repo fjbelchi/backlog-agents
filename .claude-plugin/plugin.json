@@ -22,7 +22,8 @@
     "./commands/ticket.md",
     "./commands/refinement.md",
     "./commands/implementer.md",
-    "./commands/sentinel.md"
+    "./commands/sentinel.md",
+    "./commands/audit.md"
   ],
   "skills": "./skills/"
 }
