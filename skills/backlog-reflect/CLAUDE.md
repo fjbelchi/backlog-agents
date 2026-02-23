@@ -1,0 +1,39 @@
+# Backlog Reflect Skill
+
+## Purpose
+
+Deep reflection on implementer wave outcomes. Analyzes playbook effectiveness, proposes delta updates (ADD/MERGE/DELETE), identifies recurring patterns. ACE-inspired self-improvement loop.
+
+## Modes
+
+### `reflect [--waves N]`
+Analyze last N waves (default: 10). Sonnet evaluates strategy correlations, proposes playbook improvements.
+
+### `reflect --dry-run`
+Show proposed changes without applying them.
+
+## Cost Model
+
+| Phase | Model | Calls | Cost |
+|-------|-------|-------|------|
+| Deep analysis | Sonnet | 1 | ~$0.08-0.12 |
+| Report writing | Haiku | 1 | ~$0.01 |
+| Delta application | No LLM | - | $0.00 |
+| **Total** | | **2** | **~$0.10-0.15** |
+
+## Data Sources
+
+- `.backlog-ops/usage-ledger.jsonl` — wave outcomes, gate results, costs
+- `.claude/playbook.md` — current evolving playbook with counters
+- `.backlog-ops/sentinel-patterns.json` — recurring code patterns
+- `.claude/cost-history.json` — historical ticket costs
+
+## Output
+
+- Delta updates applied to `.claude/playbook.md`
+- Report written to `.backlog-ops/reflections/reflect-{date}.md`
+
+## Dependencies
+
+- `scripts/ops/playbook_utils.py` — playbook parsing and mutation
+- `scripts/ops/cost_history.py` — cost history analysis
