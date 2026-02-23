@@ -317,6 +317,24 @@ Use current pricing (per 1M tokens):
 cost = (input_tokens / 1_000_000 * input_price) + (output_tokens / 1_000_000 * output_price)
 ```
 
+#### Step 3b: Pipeline-Aware Estimate (ACE feedback loop)
+
+If cost-history has pipeline data (from implementer v8.0), also compute a pipeline-aware estimate:
+
+```bash
+python3 -c "
+import sys; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}')
+from scripts.ops.cost_history import estimate_cost
+result = estimate_cost('.claude/cost-history.json', '${TICKET_TYPE}', '${COMPLEXITY}', ${FILE_COUNT})
+if result['estimate']:
+    print(f'Pipeline estimate: \${result[\"estimate\"]:.2f} ({result[\"confidence\"]} confidence, n={result[\"sample_size\"]})')
+"
+```
+
+If pipeline estimate available AND sample_size >= 5: show both estimates in ticket.
+If only token-based estimate available: use that (current behavior).
+Format: `**Pipeline estimate**: $X.XX (based on {N} similar tickets, {confidence} confidence)`
+
 #### Step 4: Write Cost Estimate Section in Ticket
 
 Add this section to the generated ticket after Dependencies:
