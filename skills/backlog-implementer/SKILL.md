@@ -25,10 +25,11 @@ ESCALATION to parent model (omit model: parameter):
   In these cases, the subagent inherits the parent model.
 
 OLLAMA (free tier, via llm_call.sh):
+  - Ticket complexity classification (Phase 0)
   - Wave planning JSON generation
   - Gate 1 PLAN text generation
+  - Gate 4 PRE-REVIEW checklist (reduces Sonnet review tokens)
   - Gate 5 COMMIT message generation
-  - Classification/triage
   These use llm_call.sh --model free. If Ollama fails → fallback to
   Task(model: "haiku") subagent.
 ```
@@ -502,6 +503,35 @@ Run on affected files: `typeCheckCommand` (0 errors), `lintCommand` (0 warnings)
 ### Gate 4: REVIEW (Configurable Pipeline)
 
 **Model**: `entryModelReview` (balanced/Sonnet). Sonnet provides higher-quality defect detection. Escalate to frontier after 2nd review failure.
+
+**Pre-review via Qwen3** (cost: $0.00, reduces Sonnet review tokens):
+
+Before spawning Sonnet reviewers, run a Qwen3 pre-check:
+
+```bash
+PRE_REVIEW=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free \
+  --tag "ticket:${TICKET_ID}" --tag "gate:pre-review" \
+  --system "You are a code review pre-checker. Analyze the diff and output a structured checklist. Be brief." \
+  --user "## Git Diff
+${GIT_DIFF}
+
+## Test Results
+${TEST_OUTPUT}
+
+## Lint Output
+${LINT_OUTPUT}
+
+Checklist (mark [x] or [ ]):
+- All imports used, no missing imports
+- Lint output is clean (0 warnings)
+- All tests pass
+- No debug artifacts (console.log, TODO, FIXME, HACK)
+- Format is consistent with surrounding code
+- Error messages match project language (check existing patterns)")
+```
+
+If Qwen3 returns valid checklist: inject into Sonnet reviewer prompt as `## Pre-Review Results\n{PRE_REVIEW}`.
+If Qwen3 unavailable or empty response: skip pre-review, Sonnet does full review (current behavior).
 
 Read reviewers from `config.reviewPipeline.reviewers`. Default: 2 reviewers.
 
