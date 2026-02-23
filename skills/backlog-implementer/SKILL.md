@@ -794,7 +794,7 @@ After commit, perform three actions: enrich ticket, track costs, move to complet
 
 ### 4.1 Enrich Ticket
 
-Update frontmatter: `status: completed, completed: {date}, implemented_by: backlog-implementer-v7, review_rounds, tests_added, files_changed, commit: {hash}`. Add sections: Plan, Tests, Review Rounds, Lint Gate results, Commit info.
+Update frontmatter: `status: completed, completed: {date}, implemented_by: backlog-implementer-v8, review_rounds, tests_added, files_changed, commit: {hash}`. Add sections: Plan, Tests, Review Rounds, Lint Gate results, Commit info.
 
 ### 4.2 Track Actual Cost & Cache Efficiency
 
@@ -855,6 +855,7 @@ After receiving JSON, print this banner:
 ```
 ═══ WAVE {N} COMPLETE ═══
 Tickets: {completed}/{attempted} | Tests: +{N} | Cost: ${wave_cost_usd}
+Pipeline: fast:{fast_count} full:{full_count} | Escalations: {fastPathEscalations}
 Models: free:{N} haiku:{N} sonnet:{N} opus:{N} | Ollama: {ok}/{total}
 Remaining: {pending_count} | Session total: ${session_total_cost_usd}
 Cache hit rate: {avg_cache_hit_rate}% | Waves this session: {wavesThisSession}/{sessionMaxWaves}
@@ -884,7 +885,7 @@ State continuity is guaranteed via implementer-state.json.
 
 ## State Schema v6.1
 
-State schema v6.1: see `.claude/implementer-state.json` (auto-created by `migrate-state.py`). Top-level keys: version, lastRunTimestamp, lastCycle, currentWave, stats (tickets/tests/commits/waves/cost/agentRouting/reviewStats/localModelStats), investigationQueue, failedTickets, lintBlockedTickets, completedThisSession.
+State schema v6.2: see `.claude/implementer-state.json` (auto-created by `migrate-state.py`). Top-level keys: version, lastRunTimestamp, lastCycle, currentWave, stats (tickets/tests/commits/waves/cost/agentRouting/reviewStats/localModelStats/fastPathTickets/fullPathTickets/fastPathEscalations), investigationQueue, failedTickets, lintBlockedTickets, completedThisSession.
 
 ---
 

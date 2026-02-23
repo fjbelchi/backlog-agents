@@ -1,3 +1,55 @@
+# Backlog Implementer Skill
+
+## Purpose
+
+Orchestrates ticket implementation with adaptive pipeline routing, Agent Teams, wave parallelization, and 5 quality gates. Config-driven and stack-agnostic. v8.0.
+
+## Architecture
+
+### Adaptive Pipeline (v8.0)
+
+Tickets are classified in Phase 0 by complexity (trivial/simple/complex) using Qwen3 classifier with heuristic fallback. Pipeline routes accordingly:
+
+- **Fast Path** (trivial/simple): Single Sonnet agent runs all 5 gates inline. No team creation overhead. Expected cost: $0.10-0.50 per ticket.
+- **Full Path** (complex): Team-based pipeline with Haiku implementers, Sonnet reviewers, and optional Opus frontier review. Expected cost: $1.50-3.00 per ticket.
+
+### Quality Gates
+
+5 sequential gates per ticket: Plan → TDD → Lint → Review → Commit
+
+### Model Routing
+
+```
+free (Ollama)  → classify, wave plan, plan text, pre-review checklist, commit msg
+cheap (Haiku)  → implementers, investigators, lint analysis
+balanced (Sonnet) → fast-path agent, reviewers
+frontier (Opus)   → selective high-risk review (Gate 4b)
+```
+
+## Key Files
+
+- `SKILL.md` — Full skill prompt (leader instructions)
+- `catalog/` — Embedded discipline catalogs (TDD, debug, arch, security, etc.)
+- `templates/` — Cache-optimized prompt prefixes for implementers and reviewers
+
+## Cost Model
+
+| Ticket Type | Pipeline | Expected Cost |
+|-------------|----------|---------------|
+| trivial     | fast path | $0.10-0.25 |
+| simple      | fast path | $0.25-0.50 |
+| complex     | full path | $1.50-3.00 |
+
+## State
+
+Persists to `.claude/implementer-state.json` between sessions. Tracks: completed tickets, wave counts, cost stats, model usage, fast-path escalations.
+
+## Dependencies
+
+- `backlog.config.json` — Project configuration
+- LiteLLM proxy — Model routing
+- Docker (optional) — For Ollama/Postgres access
+
 <claude-mem-context>
 # Recent Activity
 
@@ -7,15 +59,14 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #7999 | 5:36 PM | 🟣 | RAG integration completed across all backlog skills | ~336 |
-| #7991 | 5:35 PM | 🟣 | RAG post-file sync added to backlog-implementer | ~225 |
-| #7989 | 5:34 PM | 🔵 | Quality gates 2 and 3 implementation details located | ~173 |
-| #7969 | 5:31 PM | 🔵 | Backlog implementer v7.0 architecture documented | ~480 |
-| #7693 | 4:51 PM | 🔵 | Backlog-implementer skill already has RAG integration | ~297 |
+| #8306 | 8:39 PM | 🔵 | Model Tier Routing Strategy in Backlog Implementer | ~327 |
+| #8269 | 7:51 PM | 🟣 | Implementer Skill Updated with Write-Agent Pattern | ~296 |
+| #8268 | " | 🔄 | Implementer Skill Refactored for Delegated Wave Planning | ~312 |
+| #8266 | " | 🟣 | Implementer Skill Updated with Write-Agent Pattern | ~326 |
 
-### Feb 20, 2026
+### Feb 23, 2026
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #8585 | 1:39 PM | 🟣 | Context tracking integrated into all three skills | ~327 |
+| #8745 | 11:20 AM | 🟣 | Implementer v8.0 Model Routing Updated for Fast Path | ~295 |
 </claude-mem-context>
