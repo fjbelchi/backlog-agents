@@ -633,6 +633,88 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ---
 
+## Fast Path: Single-Agent Pipeline (trivial/simple tickets)
+
+When Phase 1.5 routes to FAST PATH, the leader handles each ticket WITHOUT creating a team.
+
+### Pre-loading (leader does this BEFORE spawning the agent)
+
+1. Read ticket .md completely
+2. Read ALL affected files and store their content
+3. Read code rules from config (if configured)
+4. Get test command, lint command, typecheck command from config
+5. If ragAvailable: query RAG for context snippets
+
+### Spawn Single Sonnet Agent
+
+```
+Task(
+  subagent_type: {routed_agent_type from ticket files},
+  model: "sonnet",
+  prompt: """
+You are implementing ticket {TICKET_ID}. Execute ALL 5 gates sequentially.
+
+## TICKET
+{full_ticket_markdown}
+
+## AFFECTED FILES (pre-loaded — do NOT re-read these)
+{file_contents_pre_read_by_leader}
+
+## CODE RULES
+{code_rules_content_or_"No code rules configured"}
+
+## COMMANDS
+Test: {testCommand}
+Lint: {lintCommand or "not configured"}
+TypeCheck: {typeCheckCommand or "not configured"}
+
+## EXECUTE THESE 5 GATES IN ORDER:
+
+### Gate 1: PLAN
+Write a 3-5 bullet implementation plan. Do not create a separate file.
+
+### Gate 2: IMPLEMENT (TDD)
+1. Write failing test(s) first (min 3: happy path + error + edge)
+2. Run: {testCommand} — verify tests fail
+3. Implement minimal code to make tests pass
+4. Run: {testCommand} — verify tests pass
+
+### Gate 3: LINT
+Run: {lintCommand} and {typeCheckCommand}
+If errors: fix and re-run (max 3 attempts). If still failing after 3: STOP and report.
+
+### Gate 4: SELF-REVIEW
+Check against acceptance criteria:
+{acceptance_criteria_from_ticket}
+Check code rules compliance. Report any issues found and fix them.
+
+### Gate 5: COMMIT
+Stage ONLY the files you modified:
+git add {specific_files}
+git commit with conventional format: "{type}({area}): {description}\n\nCloses: {TICKET_ID}"
+
+IRON LAWS: Never use --no-verify. Never use type suppressions. Never skip hooks.
+"""
+)
+```
+
+### Escalation to Full Path
+
+If the fast-path agent fails Gate 3 (LINT) or Gate 4 (self-REVIEW) twice:
+1. Log: `"Fast path failed for {TICKET_ID} after 2 attempts. Escalating to full pipeline."`
+2. Set `ticket.computed_complexity = "complex"` (override)
+3. Ticket enters next wave via FULL PATH
+4. Increment `stats.fastPathEscalations`
+
+### Fast Path Cost Tracking
+
+After fast-path completion, log to usage-ledger.jsonl:
+```json
+{"ticket_id": "{id}", "pipeline": "fast", "gates_passed": 5, "model": "sonnet", "cost_usd": 0.XX, "escalated_to_full": false}
+```
+
+---
+
 ## Investigator Protocol
 
 When ticket marked `needs-investigation`: read ticket + reason, analyze code in depth, write findings under `## Investigation`, change status to `ready-to-implement`. Ticket returns to queue in next wave.
