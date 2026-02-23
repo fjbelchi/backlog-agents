@@ -850,7 +850,53 @@ After writing, return ONLY:
 )
 ```
 
-After receiving JSON, print this banner:
+### Micro-Reflection (v8.0 — ACE-inspired)
+
+After the write-agent completes, if `.claude/playbook.md` exists, run micro-reflection:
+
+1. Collect wave outcomes: completed/failed tickets, gate failures, escalations, cost
+2. Read playbook bullets that were injected this wave (tracked in wave context)
+3. Spawn Haiku reflector:
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "haiku",
+  prompt: """
+Analyze this wave's outcomes and tag playbook bullets.
+
+## Wave Results
+- Tickets: {completed}/{attempted}
+- Gates failed: {gate_failures_with_reasons}
+- Escalations: {fast_path_escalations}
+- Models used: {model_breakdown}
+- Cost: ${wave_cost}
+
+## Current Playbook Bullets Used This Wave
+{bullets_referenced_with_ids}
+
+## Instructions
+1. Tag each referenced bullet: helpful, harmful, or neutral
+2. If a gate failed, identify root cause and propose 1 new bullet (ADD)
+3. If fast-path escalated, explain why classifier was wrong
+4. Max 3 tags + 1 new bullet per wave
+
+Return JSON:
+{"bullet_tags": [{"id": "strat-00001", "tag": "helpful"}],
+ "new_bullets": [{"section": "Common Mistakes", "content": "..."}],
+ "reasoning": "..."}
+"""
+)
+```
+
+4. Parse JSON response
+5. Apply counter updates: `python3 -c "from scripts.ops.playbook_utils import update_counters; update_counters('.claude/playbook.md', {tags})"`
+6. Apply new bullets: `python3 -c "from scripts.ops.playbook_utils import add_bullet; add_bullet('.claude/playbook.md', '{section}', '{content}')"`
+7. Log: `"Micro-reflection: tagged {N} bullets, added {M} new insights"`
+
+If playbook.md doesn't exist or reflector fails: skip silently (non-blocking).
+
+After micro-reflection, print this banner:
 
 ```
 ═══ WAVE {N} COMPLETE ═══
