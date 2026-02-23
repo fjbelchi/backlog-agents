@@ -249,7 +249,36 @@ All project-specific data is loaded here — NOT at skill prompt load time. This
 4. Count pending tickets in `{dataDir}/pending/*.md`
 5. Run health check if `healthCheckCommand` is configured
 6. **Cache health check**: if `usage-ledger.jsonl` exists, read last 10 entries. If average `cache_hit_rate` < `config.llmOps.cachePolicy.warnBelowHitRate` (default: 0.80), log: `⚠ Cache hit rate {rate}% below threshold. Check for prompt/tool changes.`
-7. Show startup banner with stats
+7. **Classify pending tickets** (per ticket, before wave selection):
+   For each ticket in `{dataDir}/pending/*.md`, extract: summary, affected_files count, tags, depends_on.
+
+   Call Qwen3 classifier (cost: $0.00):
+   ```bash
+   COMPLEXITY=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free \
+     --tag "gate:classify" --tag "ticket:${TICKET_ID}" \
+     --system "Classify ticket complexity. Reply with ONLY one word: trivial, simple, or complex.
+   Rules:
+   - trivial: 1 file, obvious fix (typo, config, missing import, style change)
+   - simple: 1-3 files, clear bug fix or small feature, no cross-cutting concerns
+   - complex: 4+ files, architecture changes, security, cross-cutting, has dependencies" \
+     --user "Ticket: ${TICKET_SUMMARY}
+   Affected files: ${AFFECTED_FILES_COUNT} (${AFFECTED_FILES_LIST})
+   Tags: ${TAGS}
+   Dependencies: ${DEPENDS_ON:-none}")
+   ```
+
+   Validate response is one of: trivial, simple, complex. If invalid or Qwen3 unavailable:
+   ```
+   Heuristic fallback:
+     affected_files <= 2 AND no ARCH/SEC tags AND no depends_on → simple
+     affected_files <= 5 AND no ARCH/SEC tags → complex
+     else → complex
+   ```
+
+   Override: if ticket has explicit `complexity:` field in frontmatter, use that instead.
+   Store as `ticket.computed_complexity`. Log: `"Classified {TICKET_ID}: {complexity} (source: {qwen3|heuristic|manual})"`
+
+8. Show startup banner with stats
 
 ---
 
