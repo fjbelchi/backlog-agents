@@ -1,1055 +1,288 @@
 ---
 name: backlog-implementer
-description: "Implement backlog tickets with adaptive pipeline (complexity classifier → fast-path or full pipeline), Agent Teams, wave parallelization, 5 quality gates (Plan→TDD→Lint→Review→Commit), smart agent routing, embedded skill catalog (7 disciplines), configurable review pipeline with confidence scoring, 2 Iron Laws, ticket enrichment, and cost tracking. Config-driven and stack-agnostic. v8.0."
+description: "Adaptive pipeline implementer: complexity classifier → fast/full path, 5 quality gates, smart routing, configurable reviews, script delegation, cost tracking. v9.0."
 allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, TaskUpdate, TaskGet
 ---
 
-# Backlog Implementer v8.0 — Adaptive Pipeline + Smart Agent Routing + Configurable Reviews
+# Backlog Implementer v9.0
 
-## Role
-**Leader coordinator**: Selects waves, creates teams, orchestrates quality gates. **DOES NOT implement code directly.**
+**Role**: Leader coordinator. DOES NOT implement code directly.
 
-## MODEL RULES FOR TASK TOOL
+## RULES
 
-```
-model: "haiku"   → DEFAULT for implementers, investigators, write-agents,
-                   wave planning subagents. Cost-optimized tier.
+### Model Rules
 
-model: "sonnet"  → FAST PATH single-agent (trivial/simple tickets).
-                   Also: REVIEWERS in full path (Gate 4).
+| Model | Usage | When |
+|-------|-------|------|
+| haiku | Implementers, investigators, write-agents | Default for code tasks |
+| sonnet | Fast-path single-agent, Gate 4 reviewers | Simple tickets, reviews |
+| opus | Gate 4b frontier review | High-risk patterns only |
+| free (Ollama) | Classify, wave plan, Gate 1 plan, pre-review, commit msg | Via llm_call.sh |
+| parent (omit model:) | Escalation | ARCH/SEC tag, gateFails≥2, complex+fails≥1 |
 
-ESCALATION to parent model (omit model: parameter):
-  - Ticket tagged ARCH or SECURITY
-  - qualityGateFails >= 2 for a ticket
-  - ticket.computed_complexity == "complex" AND qualityGateFails >= 1
+**CALL BUDGET**: NEVER spawn one agent per finding. ALWAYS batch.
 
-OLLAMA (free tier, via llm_call.sh):
-  - Ticket complexity classification (Phase 0)
-  - Wave planning JSON generation
-  - Gate 1 PLAN text generation
-  - Gate 4 PRE-REVIEW checklist (reduces Sonnet review tokens)
-  - Gate 5 COMMIT message generation
-  These use llm_call.sh --model free. If Ollama fails → fallback to
-  Task(model: "haiku") subagent.
-```
+### Output Discipline
+- Never output wave analysis or ticket content inline. Max ~30 lines.
+- Wave planning → `wave_plan.py`, fallback: haiku subagent
+- Wave summary → `wave_end.py`, fallback: haiku write-agent
 
-## OUTPUT DISCIPLINE
+### Write-Agent Chunking
+1. Write tool → first chunk (~40-50 lines, creates file)
+2. Bash cat >> → subsequent chunks (~40-50 lines, appends)
 
-```
-- Never output wave analysis or ticket content inline
-- Max response length: ~30 lines
-- Wave planning → llm_call.sh --model free (returns JSON), fallback to haiku subagent
-- Wave summary → delegate to haiku write-agent (writes log, returns JSON)
-```
-
-## WRITE-AGENT CHUNKING RULE
-
-Write-agents MUST write files in chunks to avoid hitting the output token limit:
-```
-1. Write tool    → first chunk (~40-50 lines): creates the file
-2. Bash cat >>   → each subsequent chunk (~40-50 lines): appends sections
-Never generate more than 50 lines of file content per tool call.
-```
+### Cache Strategy
+- Static prefix (frontmatter→rules→config→routing→loop) is cached across sessions
+- Dynamic suffix (config values, code rules, state, tickets) loaded in Phase 0
+- NEVER modify static sections during session. State updates go in messages.
 
 ---
 
-## Prompt Caching Strategy
+## CONFIG
 
-This skill is structured for maximum prompt cache efficiency:
-```
-STATIC PREFIX (cached — never changes between projects or sessions):
-  Frontmatter → Model Rules → Output Discipline → Chunking Rule →
-  Cost-Aware Execution → Team Composition → Main Loop → Phases →
-  Iron Laws → Context Management → Constraints
+Read from `backlog.config.json` in Phase 0 ONLY.
 
-DYNAMIC SUFFIX (appended at runtime in Phase 0 — project-specific):
-  Config values → Code Rules content → State → Ticket data
-```
-
-**Rules for cache preservation:**
-1. NEVER modify the static prefix sections during a session
-2. All project-specific data is read in Phase 0 and passed via conversation messages
-3. State updates between waves go in messages, not re-reads of the skill prompt
-4. Model switching happens via subagents (Task tool), never mid-session
-5. Tool set (allowed-tools) is fixed — never conditionally add/remove tools
-
-## Configuration Reference
-
-Config keys read from `backlog.config.json` at runtime (Phase 0). Defaults in parentheses:
-
-```
-backlog.dataDir (backlog/data) | backlog.ticketPrefixes (["FEAT","BUG","SEC"])
-codeRules.source (skip if unset) | codeRules.hardGates ([]) | codeRules.softGates ([])
-qualityGates: lintCommand, typeCheckCommand (skip if unset) | testCommand (REQUIRED) | buildCommand, healthCheckCommand (skip if unset)
-agentRouting.rules (general-purpose) | agentRouting.llmOverride (true)
-reviewPipeline.reviewers (2: spec+quality) | reviewPipeline.confidenceThreshold (80)
-reviewPipeline.frontierReview: enabled (true) | triggerPatterns (all) | skipForComplexity (["trivial"])
-llmOps.routing: entryModelImplement (balanced) | entryModelReview (cheap) | escalationRules ([])
-llmOps.batchPolicy ({forceBatchWhenQueueOver: 1})
-llmOps.ragPolicy: enabled (false) | serverUrl (http://localhost:8001)
-llmOps.cachePolicy: warnBelowHitRate (0.80) | sessionMaxWaves (5)
-```
-
-**Config is read ONLY in Phase 0** — not at skill load time. This keeps the prompt prefix 100% static and cacheable across all projects.
+| Key | Default |
+|-----|---------|
+| backlog.dataDir | backlog/data |
+| backlog.ticketPrefixes | [FEAT,BUG,SEC] |
+| codeRules.source / hardGates / softGates | skip if unset |
+| qualityGates.testCommand | REQUIRED |
+| qualityGates.lintCommand / typeCheckCommand / buildCommand | skip if unset |
+| agentRouting.rules / llmOverride | general-purpose / true |
+| reviewPipeline.reviewers / confidenceThreshold | 2 / 80 |
+| reviewPipeline.frontierReview.enabled / triggerPatterns | true / all |
+| llmOps.routing.entryModelImplement / entryModelReview | balanced / cheap |
+| llmOps.batchPolicy.forceBatchWhenQueueOver | 1 |
+| llmOps.ragPolicy.enabled / serverUrl | false / http://localhost:8001 |
+| llmOps.cachePolicy.warnBelowHitRate / sessionMaxWaves | 0.80 / 5 |
 
 ---
 
-## Cost-Aware Execution
+## ROUTING
 
-### Batch Mode (Default)
+| Gate | Default | Escalation | Notes |
+|------|---------|------------|-------|
+| Classify | free (classify.py) | heuristic fallback | $0 script |
+| Wave Plan | free (wave_plan.py) | haiku subagent | $0 script |
+| Gate 1 PLAN | free (llm_call.sh) | haiku subagent | Ollama first |
+| Gate 2 IMPL | haiku | sonnet on fail, parent on ARCH/SEC | TDD required |
+| Gate 3 LINT | haiku | — | Run tools, LLM analyzes |
+| Gate 4 REVIEW | sonnet | parent after 2nd fail | Pre-review via pre_review.py |
+| Gate 4b FRONTIER | opus | — | Selective, high-risk only |
+| Gate 5 COMMIT | free (commit_msg.py) | template fallback | $0 script |
+| Wave Summary | — (wave_end.py) | haiku write-agent | $0 script |
+| Micro-Reflect | — (micro_reflect.py) | haiku fallback | $0 script |
 
-Unless `--now` is passed, default to batch mode for epic-level work (50% cost reduction). If tickets >= `config.llmOps.batchPolicy.forceBatchWhenQueueOver` (default: 1) and no `--now`: submit via `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/ops/batch_submit.py"`, exit with instructions to run `batch_reconcile.py`. If script not found, proceed synchronously.
+**Batch mode**: If tickets ≥ `forceBatchWhenQueueOver` and no `--now`: `python3 batch_submit.py`, exit.
 
-### Model Tier Routing Per Gate
+**RAG**: If enabled, query `{serverUrl}/search` with ticket desc → top-K snippets (~800 tok vs ~3k full files).
 
-Before each LLM call, select the model tier using escalation rules:
-
-```
-1. Check ticket tags: ARCH or SECURITY tag → "frontier"
-2. Check gate fail count: qualityGateFails >= 2 → "frontier"
-3. Check ticket.complexity == "high" → "frontier"
-4. Use gate default:
-   FAST PATH    → "sonnet" (single agent, all gates inline)
-   Wave Plan    → "free" via llm_call.sh (fallback: haiku subagent)
-   Classify     → "free" via llm_call.sh (fallback: heuristic)
-   Pre-Review   → "free" via llm_call.sh (fallback: skip)
-   Gate 1 PLAN  → "free" via llm_call.sh (fallback: haiku subagent)
-   Gate 2 IMPL  → "cheap" (haiku)
-   Gate 3 LINT  → "cheap" (haiku)
-   Gate 4 REVIEW→ "balanced" (sonnet)
-   Gate 4b      → "frontier" (opus, selective)
-   Gate 5 COMMIT→ "free" via llm_call.sh (fallback: template)
-```
-
-### v8.0 Projected Cost Model
-
-| Ticket Type | v7.0 Cost | v8.0 Cost | Savings | Pipeline |
-|-------------|-----------|-----------|---------|----------|
-| trivial     | $1.50-2.50 | $0.10-0.25 | 85-93% | fast path |
-| simple      | $1.50-2.50 | $0.25-0.50 | 67-90% | fast path |
-| complex     | $2.00-4.00 | $1.50-3.00 | 25-50% | full path |
-
-Based on benchmark: AUDIT-BUG-20260220-003 (simple bug fix) cost $2.04 on v7.0 vs projected $0.25-0.50 on v8.0 fast path.
-
-Model aliases resolve via LiteLLM config: `free` → Ollama qwen3-coder, `cheap` → Haiku, `balanced` → Sonnet, `frontier` → Opus.
-
-### Local Model Routing (Junior Programmer Pattern)
-
-When Ollama is detected in Phase 0.5, simple tickets route through LiteLLM proxy `free` tier via `scripts/ops/llm_call.sh` instead of spawning Claude Code subagents.
-
-The leader calls `llm_call.sh --model free` for plan gates. Review always uses cloud (Sonnet/Haiku) — local never reviews itself.
-
-LOCAL-ELIGIBLE tickets (ALL must be true):
-  - complexity != "high"
-  - NO tags: ARCH, SECURITY
-  - affected_files <= 3
-  - NOT depends_on another ticket in this wave
-  - localModelStats.escalatedToCloud / totalAttempts < 0.30
-
-For LOCAL-ELIGIBLE tickets:
-  Gate 1 PLAN:      result=$(bash scripts/ops/llm_call.sh --model free --tag "ticket:{id}" --tag "gate:plan" --system "Write implementation plan" --file ticket.md)
-                    If empty or error → fallback to Task(model: "haiku") subagent
-  Gate 2 IMPLEMENT: Task() subagent (needs tool_use for edits). Use normal routing.
-  Gate 3 LINT:      → run locally (no LLM)
-  Gate 4 REVIEW:    → Task(model: "haiku") subagent — cloud reviews local output
-  Gate 5 COMMIT:    → always "cheap"
-
-ESCALATION RULES:
-
-  Haiku IMPLEMENT fails Gate 3 (LINT) or Gate 4 (REVIEW) once:
-    1. stats.localModelStats.escalatedToCloud++
-    2. stats.localModelStats.failuresByType[gate]++
-    3. Re-run Gate 2 IMPLEMENT with Task(model: "sonnet") with full context
-    4. Message: "Haiku failed on {id} at {gate}. Escalated to Sonnet."
-
-  Ollama PLAN (Gate 1) returns empty or invalid JSON:
-    → Fallback to Task(model: "haiku") subagent
-    → No stats increment (expected fallback behavior)
-
-  Ollama COMMIT (Gate 5) returns empty:
-    → Use template: "{type}({area}): implement {ticket_id}"
-    → No stats increment (expected fallback behavior)
-
-  Ollama WAVE PLANNING returns invalid JSON:
-    → Fallback to Task(model: "haiku") subagent
-    → No stats increment (expected fallback behavior)
-
-Success: stats.localModelStats.successCount++, totalAttempts++
-
-### RAG Context Compression
-
-If `config.llmOps.ragPolicy.enabled`: query `{serverUrl}/search` with ticket description, get top-K snippets (~800 tokens vs ~3k full files), use in prompt instead of full file reads. If unreachable, fall back to direct reads without error.
-
-### Cost & Cache Ledger
-
-After each gate, append to `.backlog-ops/usage-ledger.jsonl`:
-```json
-{"ticket_id": "FEAT-001", "gate": "implement", "requested_model": "cheap", "actual_model": "haiku", "escalated": false, "input_tokens": 1200, "output_tokens": 800, "cache_read_tokens": 1050, "cache_creation_tokens": 150, "cache_hit_rate": 0.88, "cost_usd": 0.0156, "ollama_attempted": false, "ollama_fallback": false, "date": "2026-02-19"}
-```
-
-Fields for model tracking:
-- `requested_model`: the tier alias requested (free/cheap/balanced/frontier)
-- `actual_model`: the model that actually served the request (e.g. "ollama/qwen3-coder:30b", "claude-haiku-4-5", "claude-sonnet-4-6")
-- `escalated`: true if the model was escalated from the default for this gate
-- `ollama_attempted`: true if free tier was tried via llm_call.sh
-- `ollama_fallback`: true if Ollama failed and fell back to cloud
-
-**Cache fields** (extract from LiteLLM response headers or Task metadata):
-- `cache_read_tokens`: tokens served from cache (header: `x-litellm-cache-read-input-tokens`)
-- `cache_creation_tokens`: tokens written to cache (header: `x-litellm-cache-creation-input-tokens`)
-- `cache_hit_rate`: `cache_read_tokens / input_tokens` (0.0-1.0). If headers unavailable, set to `null`.
-- `cost_usd`: actual cost from `x-litellm-response-cost` header, or calculated from tokens
-
-**Cache health monitoring**: The Phase 0 startup reads the last 10 ledger entries and warns if average cache_hit_rate drops below threshold. This catches prompt/tool changes that silently break cache.
+**Cost ledger**: After each gate → append to `.backlog-ops/usage-ledger.jsonl` with ticket_id, gate, model, tokens, cache_hit_rate, cost_usd.
 
 ---
 
-## Team Composition (Smart Routing)
+## TEAM
 
-The leader analyzes each ticket's Affected Files and routes to the best agent type.
+| Role | Agent Type | Model |
+|------|-----------|-------|
+| Leader (you) | — | — |
+| implementer-N | Routed from file extensions | haiku (default) |
+| code-reviewer | code-quality | sonnet |
+| investigator | general-purpose | haiku |
 
-### Routing Algorithm
-1. Read `Affected Files` from ticket, match against `config.agentRouting.rules` (first match wins)
-2. Multiple agent matches: majority vote. If `llmOverride` true: LLM can override (e.g., ML ticket with .py -> ml-engineer)
-3. No match: general-purpose. Apply `config.agentRouting.overrides` by ticket type
+**Routing**: .tsx/.jsx/.css→frontend, .py/.go/.rs→backend, Dockerfile/.tf→devops, .ipynb→ml-engineer, default→general-purpose. Majority vote if mixed. Override via `agentRouting.rules`.
 
-### Default Routing Rules
-
-frontend: *.tsx/jsx/css/vue | backend: *.ts/js, *.py, *.go, *.rs | general-purpose: *.swift, *.kt/java | devops: Dockerfile/yaml/tf | ml-engineer: *.ipynb/train*/model*
-
-### Team Structure Per Wave
-
-```
-LEADER (you) — coordinates, DOES NOT implement
-├── implementer-1 ({routed_agent_type} from routing)
-├── implementer-2 ({routed_agent_type} - may differ per ticket)
-├── implementer-3 (optional, if 3 compatible slots)
-├── reviewer-1..N (from reviewPipeline config)
-└── investigator (general-purpose) — unblocks complex tickets
-```
-
-## Priority Order
-
-Read prefixes from `config.backlog.ticketPrefixes`. Default: SEC->P0, BUG->P1, QUALITY->P2, FEAT->P3, rest->P4
+**Priority**: SEC→P0, BUG→P1, QUALITY→P2, FEAT→P3, rest→P4.
 
 ---
 
 ## MAIN LOOP
 
 ```
-PHASE 0: STARTUP → load config + codeRules + state, cache health, classify tickets, show banner
-PHASE 0.5: DETECT CAPABILITIES → scan plugins + MCP servers, log capabilities
-WHILE pending_tickets_exist() AND wavesThisSession < sessionMaxWaves: cycle++
-  PHASE 1: WAVE SELECTION → top 10 by priority, analyze blast radius, select 2-3 compatible slots
+PHASE 0: STARTUP → bash startup.sh → parse config, tickets, ollama, playbook
+PHASE 0.5: (merged into startup.sh — plugin root, Ollama detect, LiteLLM)
+WHILE pending_tickets AND wavesThisSession < sessionMaxWaves:
+  PHASE 1: WAVE SELECT → python3 wave_plan.py → 2-3 compatible slots
   PHASE 1.5: ROUTE PIPELINE →
-    IF all wave tickets have computed_complexity in (trivial, simple):
-      → FAST PATH: run each ticket through single-agent pipeline (no team)
-      → Skip Phase 2-3, use "Fast Path" section instead
-    ELSE IF mix of simple + complex:
-      → Run simple tickets via FAST PATH first (sequentially)
-      → Then run complex tickets via FULL PATH (team-based)
-    ELSE:
-      → FULL PATH (existing v7.0 team pipeline)
+    All trivial/simple → FAST PATH (no team, single Sonnet per ticket)
+    Mix simple+complex → fast path first, then full path
+    All complex → FULL PATH (team-based)
   [FULL PATH only:]
   PHASE 2: CREATE TEAM → TeamCreate, spawn implementers + reviewer + investigator
-  PHASE 3: ORCHESTRATE → per ticket: 3a PLAN → 3b IMPLEMENT → 3c LINT → 3d REVIEW → 3e COMMIT
-  PHASE 4: VERIFY & ENRICH & MOVE → git log -1 confirms, enrich ticket, mv to completed/
+  PHASE 3: GATES → per ticket: PLAN→IMPL→LINT→REVIEW→COMMIT
+  PHASE 4+6: WAVE END → python3 wave_end.py (enrich, move, log, reflect, limits)
   PHASE 5: CLEANUP → shutdown teammates, TeamDelete, save state
-  PHASE 6: WAVE SUMMARY → delegate log to write-agent, print banner, check session limits
-IF pending_tickets_exist() AND wavesThisSession >= sessionMaxWaves:
-  → save state, print "Session wave limit reached. Run /backlog-toolkit:implementer to continue."
+IF session limit reached: save state, print continue message, EXIT
 ```
 
 ---
 
-## Phase 0: Startup (Dynamic Context Loading)
+## STARTUP
 
-All project-specific data is loaded here — NOT at skill prompt load time. This keeps the cached prefix stable.
-
-1. Read `backlog.config.json` → store all values in working memory
-2. If `codeRules.source` is set → read that file, store full content for injection into implementer prompts
-3. Load `.claude/implementer-state.json` (if `state.version != "6.1"` or missing, run: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/migrate-state.py"`)
-4. Count pending tickets in `{dataDir}/pending/*.md`
-5. Run health check if `healthCheckCommand` is configured
-6. **Cache health check**: if `usage-ledger.jsonl` exists, read last 10 entries. If average `cache_hit_rate` < `config.llmOps.cachePolicy.warnBelowHitRate` (default: 0.80), log: `⚠ Cache hit rate {rate}% below threshold. Check for prompt/tool changes.`
-7. **Classify pending tickets** (per ticket, before wave selection):
-   For each ticket in `{dataDir}/pending/*.md`, extract: summary, affected_files count, tags, depends_on.
-
-   Call Qwen3 classifier (cost: $0.00):
-   ```bash
-   COMPLEXITY=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free \
-     --tag "gate:classify" --tag "ticket:${TICKET_ID}" \
-     --system "Classify ticket complexity. Reply with ONLY one word: trivial, simple, or complex.
-   Rules:
-   - trivial: 1 file, obvious fix (typo, config, missing import, style change)
-   - simple: 1-3 files, clear bug fix or small feature, no cross-cutting concerns
-   - complex: 4+ files, architecture changes, security, cross-cutting, has dependencies" \
-     --user "Ticket: ${TICKET_SUMMARY}
-   Affected files: ${AFFECTED_FILES_COUNT} (${AFFECTED_FILES_LIST})
-   Tags: ${TAGS}
-   Dependencies: ${DEPENDS_ON:-none}")
-   ```
-
-   Validate response is one of: trivial, simple, complex. If invalid or Qwen3 unavailable:
-   ```
-   Heuristic fallback:
-     affected_files <= 2 AND no ARCH/SEC tags AND no depends_on → simple
-     affected_files <= 5 AND no ARCH/SEC tags → complex
-     else → complex
-   ```
-
-   Override: if ticket has explicit `complexity:` field in frontmatter, use that instead.
-   Store as `ticket.computed_complexity`. Log: `"Classified {TICKET_ID}: {complexity} (source: {qwen3|heuristic|manual})"`
-
-8. **Load playbook** (if `.claude/playbook.md` exists):
-   Parse with `python3 scripts/ops/playbook_utils.py stats .claude/playbook.md`.
-   Log: `"Playbook: {total} bullets ({high_performing} high, {problematic} problematic)"`.
-   Auto-prune: run `python3 -c "from scripts.ops.playbook_utils import prune_playbook; prune_playbook('.claude/playbook.md')"`.
-   If playbook doesn't exist: log `"No playbook found. Run /backlog-toolkit:reflect to initialize."` and continue.
-9. Show startup banner with stats
-
----
-
-## Phase 0.5: Detect Capabilities
-
-Scan `~/.claude/plugins/` for superpowers (TDD, debugging, verification, code-review) and stack-specific plugins (python: pg-aiguide, aws-skills; typescript: playwright-skill). Note any configured MCP servers. Log detected capabilities. When an external skill is available for a discipline, prefer it over the embedded catalog version.
-
-**Resolve Plugin Root** (MUST run before any script references):
 ```bash
-# CLAUDE_PLUGIN_ROOT may not be set in the session environment.
-# Resolve it by finding the installed backlog-toolkit plugin.
-if [ -z "${CLAUDE_PLUGIN_ROOT:-}" ]; then
-  # Search common plugin installation paths
-  for candidate in \
-    ~/.claude/plugins/cache/backlog-toolkit*/*/  \
-    ~/.claude/plugins/backlog-toolkit/  \
-    ~/github/backlog-agents/  \
-    ; do
-    if [ -f "${candidate}scripts/ops/llm_call.sh" ]; then
-      export CLAUDE_PLUGIN_ROOT="${candidate%/}"
-      break
-    fi
-  done
-fi
-
-if [ -z "${CLAUDE_PLUGIN_ROOT:-}" ]; then
-  echo "⚠ CLAUDE_PLUGIN_ROOT not found. llm_call.sh and RAG scripts unavailable."
-  echo "  Scripts that depend on plugin root will fall back to cloud defaults."
-fi
-```
-Log: `"Plugin root: ${CLAUDE_PLUGIN_ROOT:-NOT FOUND}"`
-
-**LiteLLM Connection** (set defaults if not configured):
-```bash
-export LITELLM_BASE_URL="${LITELLM_BASE_URL:-http://localhost:8000}"
-export LITELLM_MASTER_KEY="${LITELLM_MASTER_KEY:-$(grep LITELLM_MASTER_KEY .env.docker.local 2>/dev/null | cut -d= -f2)}"
+STARTUP_JSON=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/startup.sh")
 ```
 
-**Ollama Detection** (critical for cost optimization):
-```bash
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
-  OLLAMA_RESULT=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free --tag "gate:health-check" --user "Reply OK" 2>&1)
-  OLLAMA_EXIT=$?
-else
-  # Fallback: test Ollama directly via LiteLLM
-  OLLAMA_RESULT=$(curl -s -m 10 "${LITELLM_BASE_URL}/v1/chat/completions" \
-    -H "Authorization: Bearer ${LITELLM_MASTER_KEY}" \
-    -H "Content-Type: application/json" \
-    -d '{"model":"free","messages":[{"role":"user","content":"Reply OK"}],"max_tokens":5}' 2>&1)
-  OLLAMA_EXIT=$?
-fi
-```
-- If exit 0 and response contains "OK": set `ollamaAvailable=true`
-- Log: `"✓ Local model: free tier via Ollama (qwen3-coder) — plan/commit gates will use $0 local model"`
-- If exit != 0: set `ollamaAvailable=false`
-- Log: `"⚠ Ollama unavailable (exit=${OLLAMA_EXIT}). All gates fall back to cloud models. Reason: ${OLLAMA_RESULT}"`
-- Also log: `"  → LiteLLM URL: ${LITELLM_BASE_URL}, Key: ${LITELLM_MASTER_KEY:+set}${LITELLM_MASTER_KEY:-unset}, Plugin: ${CLAUDE_PLUGIN_ROOT:-NOT SET}"`
-
-**Model Routing Summary** (print in startup banner):
-```
-Model routing for this session:
-  Wave planning: ${ollamaAvailable ? "free (Ollama)" : "haiku (cloud)"}
-  Gate 1 PLAN:   ${ollamaAvailable ? "free (Ollama)" : "haiku (cloud)"}
-  Gate 2 IMPL:   haiku (cloud) — escalates to sonnet on failure
-  Gate 3 LINT:   haiku (cloud)
-  Gate 4 REVIEW: sonnet (cloud)
-  Gate 4b FRONTIER: opus (selective — only for high-risk patterns)
-  Gate 5 COMMIT: ${ollamaAvailable ? "free (Ollama)" : "template fallback"}
-  Escalation:    inherits parent on ARCH/SECURITY/high-complexity
-```
+Parse: `config`, `tickets` (with computed_complexity), `ollama_available`, `playbook_stats`, `cache_health`, `state_exists`.
+If error field present: exit with message.
+If cache_health.warning: log `"⚠ Cache hit rate below threshold"`.
+Show startup banner with ticket count, model routing summary, playbook stats.
 
 ---
 
-## Phase 1: Wave Selection
+## WAVE SELECT
 
-Read ticket metadata (IDs, priorities, affected files) — do NOT output analysis inline.
+```bash
+WAVE_JSON=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/wave_plan.py" --tickets "$TICKETS_JSON")
+```
 
-# Try Ollama first (free) — tags enable per-ticket cost analysis in LiteLLM spend logs
-WAVE_JSON=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free \
-  --tag "gate:wave-plan" --tag "session:${SESSION_ID:-$(date +%s)}" \
-  --system "You analyze tickets and return wave plans as JSON. No explanations." \
-  --user "Tickets (id, priority, affected_files):
-{ticket_metadata_list}
-
-Rules:
-- Group into 2-3 slots WITHOUT file conflicts
-- Never parallelize: same file, depends_on relationships, create-then-import chains
-- Tickets affecting different directories almost never conflict
-- Select subagent_type per ticket based on file patterns
-- BATCH SIMILAR TICKETS: If 2+ tickets share the same prefix, same directory, and same
-  change pattern, group them into ONE slot with batch: true.
-
-Return ONLY this JSON:
-{\"waves\":[{\"wave\":1,\"tickets\":[{\"id\":\"BUG-001\",\"subagent_type\":\"backend\",\"rationale\":\"auth service\"}]}],\"skipped\":[]}")
-
-# Validate JSON response; fallback to Haiku subagent if invalid
-if ! echo "$WAVE_JSON" | python3 -c "import json,sys; json.load(sys.stdin)" 2>/dev/null; then
-  # Ollama failed or returned invalid JSON — use Haiku subagent
-  Task(
-    subagent_type: "general-purpose",
-    model: "haiku",
-    prompt: """...same wave planning prompt as above..."""
-  )
-fi
-
-Use the returned JSON to create the team and assign tasks.
+If invalid JSON or script fails: fallback to Task(model:"haiku") with wave planning prompt.
+Parse `waves[]` and `skipped[]`. Each ticket has `id`, `subagent_type`, `rationale`.
 
 ---
 
-## Phase 2: Create Team
+## CREATE TEAM
 
 ```
 TeamCreate("impl-{YYYYMMDD-HHmm}")
-
-Spawn teammates via Task tool (model: "sonnet" by default):
-
-1. implementer-1:
-   subagent_type: select based on ticket area
-   model: "haiku"  (omit if ARCH/SECURITY/escalation → inherits parent)
-   team_name: "impl-{timestamp}"
-   name: "implementer-1"
-
-2. code-reviewer:
-   subagent_type: "code-quality"
-   model: "sonnet"
-   team_name: "impl-{timestamp}"
-   name: "code-reviewer"
-
-3. investigator:
-   subagent_type: "general-purpose"
-   model: "haiku"
-   team_name: "impl-{timestamp}"
-   name: "investigator"
+Spawn: implementer-N (model:haiku, routed type), code-reviewer (model:sonnet), investigator (model:haiku)
 ```
 
-### Context Pre-Loading (v8.0 optimization)
-
-Before spawning implementers, the leader pre-reads all affected files for every ticket in the wave:
-
-```
-For each ticket in wave:
-  affected_content[ticket_id] = {}
-  For each file in ticket.affected_files:
-    affected_content[ticket_id][file] = Read(file)
-```
-
-Pass `affected_content[ticket_id]` in each implementer's prompt instead of letting subagents read files themselves. This eliminates 30-40 redundant Haiku file-read calls per wave.
-
-### Coordination Cap (v8.0)
-
-Maximum 5 coordination tool calls (TaskCreate, TaskUpdate, SendMessage) per wave for non-implementation work. Beyond 5, batch remaining status updates into a single summary message at wave end. This reduces the ~40 coordination-only API calls observed in v7.0 benchmarks.
+**Context pre-loading**: Leader reads ALL affected files before spawning. Pass content in prompt (eliminates 30-40 redundant reads).
+**Coordination cap**: Max 5 non-implementation tool calls per wave. Batch remaining into summary.
 
 ---
 
-## Phase 3: Quality Gates (per ticket)
+## QUALITY GATES
 
 ### Gate 1: PLAN
 
-**Context tracking**: Before spawning the planning agent, set the backlog context:
-```bash
-source scripts/ops/context.sh
-set_backlog_context "$ticket_id" "plan" "$routed_agent_type" "backlog-implementer"
-```
-Update gate name as work progresses: `"plan"` → `"implement"` → `"lint"` → `"review"`.
-Call `clear_backlog_context` after Gate 5 COMMIT completes.
-
-**Model**: apply escalation rules (see Cost-Aware Execution). Default: `entryModelPlan` (free via llm_call.sh). If Ollama unavailable or response invalid → fallback to Task(model: "haiku").
-**RAG**: if ragAvailable:
-1. `POST {serverUrl}/search` with ticket description, get top-K snippets instead of full file reads
-2. Query sentinel memory: `POST {serverUrl}/search` with affected_files, filter `{"found_by": "backlog-sentinel"}`, n_results=3. If results with distance < 0.3, inject at TOP of implementer prompt: `WARNING: RECURRING PATTERNS -- avoid these known mistakes: {pattern.description} (found in {pattern.file})`
-
-If RAG unreachable, fall back to direct file reads without error.
-
-Implementer receives ticket and MUST:
-1. Read ticket .md completely
-2. If ragAvailable: query RAG → use top-K snippets for context; else read affected files directly
-3. Write plan in ticket under `## Implementation Plan`
-4. If unclear → message leader: "needs-investigation"
-5. Log gate cost to usage-ledger.jsonl
+Set context: `source scripts/ops/context.sh && set_backlog_context "$ticket_id" "plan" ...`
+If ragAvailable: query RAG for snippets + sentinel patterns (inject warnings at top).
+Implementer reads ticket, writes plan in `## Implementation Plan`. If unclear → "needs-investigation".
+Log gate cost to usage-ledger.
 
 ### Catalog Injection
 
-The leader selects catalog disciplines based on ticket type and routing. Always inject: CAT-TDD, CAT-PERF. Add per type: BUG+CAT-DEBUG, FEAT+CAT-ARCH, SEC+CAT-SECURITY. Add per agent: frontend+CAT-FRONTEND. Read catalog files from `catalog/` dir, include in implementer prompt AFTER Code Rules and BEFORE Iron Laws.
-
-If an external skill was detected in Phase 0.5 for the same discipline, prefer the external skill instructions.
+Always: CAT-TDD + CAT-PERF. Per type: BUG→CAT-DEBUG, FEAT→CAT-ARCH, SEC→CAT-SECURITY. Per agent: frontend→CAT-FRONTEND. Read from `catalog/`. Prefer external skill if detected in Phase 0.5.
 
 ### Gate 2: IMPLEMENT (TDD)
 
-**Model**: apply escalation rules. Default: `entryModelImplement` (cheap/Haiku). Escalate to balanced if qualityGateFails >= 1, frontier if ARCH/SECURITY tag or qualityGateFails >= 2.
+Min 3 tests: happy + error + edge. Order: failing tests → minimal code → tests pass.
 
-Min 3 tests per ticket: 1 happy path (main flow) + 1 error path (invalid inputs, auth) + 1 edge case (boundary, empty, null). Order: failing tests -> minimal code -> tests pass.
+**Prompt construction** (cache-optimized):
+1. STATIC PREFIX: `templates/implementer-prefix.md` (cached ~90% hit after first call)
+2. DYNAMIC SUFFIX (in order): CODE RULES → PLAYBOOK BULLETS (via `select_relevant()`, top-10, between rules and catalogs) → CATALOG DISCIPLINES → RAG CONTEXT → TICKET CONTENT → GATE INSTRUCTIONS
 
-**Prompt Construction (cache-optimized)**:
-
-The leader constructs implementer prompts using a static prefix + dynamic suffix pattern:
-
-```
-1. STATIC PREFIX: Read templates/implementer-prefix.md (identical for ALL implementers)
-   Contains: role, TDD protocol, context rules, Iron Laws
-   → This prefix is cached by Anthropic API after the first subagent call.
-     Subsequent implementers in the same wave get ~90% cache hit on this prefix.
-
-2. DYNAMIC SUFFIX (appended after prefix, in this order):
-   a. CODE RULES — MANDATORY COMPLIANCE
-      Read from: {config.codeRules.source}
-      {FULL CONTENT OF THE CODE RULES FILE}
-      HARD GATES (block commit): {config.codeRules.hardGates}
-      SOFT GATES (review + justify): {config.codeRules.softGates}
-   a2. PLAYBOOK CONTEXT (ACE-inspired learning)
-      If playbook loaded in Phase 0, select relevant bullets:
-      `python3 -c "from scripts.ops.playbook_utils import select_relevant; ..."`
-      Match by ticket_type, tags, affected_files. Inject top-K (K=10) as:
-      "## Learned Strategies (from project playbook)\n{selected_bullets}"
-      Track which bullet IDs were injected (for micro-reflector in Phase 6).
-   b. CATALOG DISCIPLINES (CAT-TDD + type-specific catalogs)
-   c. RAG CONTEXT (recurring patterns + code snippets, if available)
-   d. TICKET CONTENT (the full ticket .md)
-   e. GATE-SPECIFIC INSTRUCTIONS
-```
-
-If `codeRules.source` is not configured, skip code rules injection but still enforce TDD and Iron Laws.
-
-**Post-file RAG sync**: After each file is written or modified by a subagent, if ragAvailable:
-```bash
-source "${CLAUDE_PLUGIN_ROOT}/scripts/rag/client.sh" && rag_upsert_file "{modified_file_path}"
-```
-This keeps the index current during multi-file implementations so later tasks in the same wave can query the latest code state.
-
-### Gate 3: LINT GATE
-
-**Model**: `entryModelReview` (cheap). Run actual tools, LLM only analyzes results.
-Run on affected files: `typeCheckCommand` (0 errors), `lintCommand` (0 warnings), `testCommand` (0 failures). Skip unconfigured commands. Auto-fix max 3 attempts; after 3 failures: mark `lint-blocked`, skip to next wave.
-
-### Gate 4: REVIEW (Configurable Pipeline)
-
-**Model**: `entryModelReview` (balanced/Sonnet). Sonnet provides higher-quality defect detection. Escalate to frontier after 2nd review failure.
-
-**Pre-review via Qwen3** (cost: $0.00, reduces Sonnet review tokens):
-
-Before spawning Sonnet reviewers, run a Qwen3 pre-check:
-
-```bash
-PRE_REVIEW=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free \
-  --tag "ticket:${TICKET_ID}" --tag "gate:pre-review" \
-  --system "You are a code review pre-checker. Analyze the diff and output a structured checklist. Be brief." \
-  --user "## Git Diff
-${GIT_DIFF}
-
-## Test Results
-${TEST_OUTPUT}
-
-## Lint Output
-${LINT_OUTPUT}
-
-Checklist (mark [x] or [ ]):
-- All imports used, no missing imports
-- Lint output is clean (0 warnings)
-- All tests pass
-- No debug artifacts (console.log, TODO, FIXME, HACK)
-- Format is consistent with surrounding code
-- Error messages match project language (check existing patterns)")
-```
-
-If Qwen3 returns valid checklist: inject into Sonnet reviewer prompt as `## Pre-Review Results\n{PRE_REVIEW}`.
-If Qwen3 unavailable or empty response: skip pre-review, Sonnet does full review (current behavior).
-
-Read reviewers from `config.reviewPipeline.reviewers`. Default: 2 reviewers.
-
-**Spawn reviewers in parallel** as team members using cache-optimized prompts:
-
-```
-Reviewer prompt construction:
-1. STATIC PREFIX: Read templates/reviewer-prefix.md (identical for ALL reviewers)
-   Contains: role, review protocol, focus types, standards, scoring, output format
-   → Cached after first reviewer call. Subsequent reviewers get ~90% cache hit.
-
-2. DYNAMIC SUFFIX (appended after prefix):
-   a. CODE RULES (from config)
-   b. CAT-REVIEW catalog discipline
-   c. CHANGED FILES (diff or full content of modified files)
-   d. TICKET CONTEXT (acceptance criteria from ticket .md)
-   e. FOCUS ASSIGNMENT: "Your focus: {focus_type}"
-   f. PREVIOUS FINDINGS (if re-review: include prior round findings)
-```
-
-- Each reviewer evaluates from their configured `focus` perspective
-- Each reviewer scores findings 0-100 confidence
-
-**Conversation pruning (v8.0):** The reviewer agent receives ONLY:
-- Git diff of changes (`git diff HEAD~1`)
-- Test results summary (pass/fail counts + failure details)
-- Original ticket ACs
-- Pre-review checklist (if available from Qwen3)
-
-It does NOT receive the full planning/implementation conversation. This prevents the 44K→99K prompt growth observed in v7.0 benchmarks.
-
-**Focus types:** spec (ACs met?), quality (DRY/readability), security (OWASP/input validation/auth/secrets), history (regression risk/pattern consistency)
-
-**Auto-escalation**: SEC tickets with < 4 reviewers auto-add security + history reviewers.
-
-**Consolidation**: Collect findings, filter by confidence >= `confidenceThreshold`, classify (Critical/Important/Suggestion). Critical/Important from `required` reviewers triggers re-review. Max `maxReviewRounds` then `review-blocked`. Result: `APPROVED` or `CHANGES_REQUESTED`.
-
-### Gate 4b: FRONTIER REVIEW (Selective Opus Escalation)
-
-**When**: After Gate 4 reviewers APPROVE (not on every ticket — only when high-risk patterns detected).
-
-**Purpose**: Catch edge-case defects that Sonnet misses: type safety across serialization boundaries, error propagation gaps, production deployment considerations, semantic dead weight. Costs ~$0.05-0.15 per ticket but closes the quality gap from ~75% to ~90% of Opus-level review.
-
-**Trigger — scan the diff for HIGH-RISK patterns:**
-
-```
-HIGH_RISK_PATTERNS (any match triggers Gate 4b):
-  - SERIALIZATION:  JSON.parse, JSON.stringify, Redis get/set, cache round-trip,
-                    Buffer, protobuf, msgpack, toJSON, fromJSON
-  - DB_SCHEMA:      new Schema, createIndex, dropIndex, addColumn, migration,
-                    .index({, schema.indexes(), model changes with index: true
-  - AUTH:           jwt, token, session, password, bcrypt, oauth, permission, role
-  - ERROR_HANDLING: Promise.all, Promise.allSettled, try/catch with external calls,
-                    fallback logic, circuit breaker, retry, timeout
-  - EXTERNAL_API:   new HttpClient, fetch(, axios, got(, new import of external SDK
-  - CONCURRENCY:    Promise.all, Promise.race, worker_threads, cluster, mutex, lock
-```
-
-**Skip Gate 4b when:**
-  - Diff touches only: tests, docs, config, comments, formatting
-  - Ticket complexity is "trivial"
-  - `maxEscalationsPerTicket` already reached
-
-**Execution:**
-
-```
-1. Spawn ONE frontier review subagent:
-   Task(model: "opus", subagent_type: "code-quality")
-
-2. Prompt (focused, not full re-review):
-   "You are a senior reviewer doing a FINAL CHECK on code already approved by Sonnet.
-    Focus ONLY on these patterns found in the diff: {detected_patterns}
-
-    CHECKLIST (check each that applies):
-    □ TYPE SAFETY: Do types survive serialization round-trips? (JSON.parse loses Date,
-      Buffer, BigInt, Map, Set, RegExp, undefined). Are interfaces consistent across
-      API boundaries?
-    □ ERROR PROPAGATION: Does Promise.all reject cleanly on partial failure?
-      Are external call failures handled without silent data loss?
-    □ PRODUCTION READINESS: Are DB migrations needed beyond schema changes?
-      Will this work in a rolling deployment (old + new code running simultaneously)?
-    □ SEMANTIC CORRECTNESS: Are field names accurate? Are there dead fields
-      (two fields with identical values)? Do calculations match their names?
-    □ RESOURCE MANAGEMENT: Are connections/handles properly cleaned up?
-      Could this leak memory under load?
-    □ BACKWARD COMPATIBILITY: Does this change break existing API consumers?
-      Are there callers that depend on the old behavior?
-
-    Diff to review:
-    {diff}
-
-    Score each finding 0-100 confidence. Only report Critical/Important.
-    If nothing found, respond: APPROVED — no edge-case issues detected."
-
-3. If Opus finds Critical/Important findings:
-   - CHANGES_REQUESTED, implementer fixes, then re-run Gate 4 (Sonnet) only
-   - Do NOT re-run Gate 4b (prevent Opus review loops)
-   - Log: "Opus review caught {N} findings: {summary}"
-
-4. If APPROVED:
-   - Log: "Opus review: APPROVED (no edge-case issues)"
-   - Proceed to Gate 5
-```
-
-**Cost tracking**: Add `frontier_review: true/false` and `frontier_review_findings: N` to usage ledger.
-
-### Gate 5: COMMIT
-
-Generate commit message via Ollama (free), template fallback:
-
-```bash
-COMMIT_MSG=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/llm_call.sh" --model free \
-  --tag "ticket:{ticket_id}" --tag "gate:commit" \
-  --system "Generate a git commit message in Conventional Commits format. Return ONLY the message, no explanation." \
-  --user "Type: {type}, Area: {area}, Ticket: {ticket_id}, Changes: {summary}")
-
-# Fallback to template if Ollama fails
-if [ -z "$COMMIT_MSG" ]; then
-  COMMIT_MSG="{type}({area}): implement {ticket_id}"
-fi
-```
-
-Then use $COMMIT_MSG in the git commit:
-
-Only after reviewer approval:
-
-```bash
-git add {specific_files}
-git commit -m "{type}({area}): {description}
-
-Closes: {ticket_id}
-Review-rounds: {N}
-Tests-added: {N}
-
-Co-Authored-By: Claude <noreply@anthropic.com>"
-```
-
----
-
-## Fast Path: Single-Agent Pipeline (trivial/simple tickets)
-
-When Phase 1.5 routes to FAST PATH, the leader handles each ticket WITHOUT creating a team.
-
-### Pre-loading (leader does this BEFORE spawning the agent)
-
-1. Read ticket .md completely
-2. Read ALL affected files and store their content
-3. Read code rules from config (if configured)
-4. Get test command, lint command, typecheck command from config
-5. If ragAvailable: query RAG for context snippets
-
-### Spawn Single Sonnet Agent
-
-```
-Task(
-  subagent_type: {routed_agent_type from ticket files},
-  model: "sonnet",
-  prompt: """
-You are implementing ticket {TICKET_ID}. Execute ALL 5 gates sequentially.
-
-## TICKET
-{full_ticket_markdown}
-
-## AFFECTED FILES (pre-loaded — do NOT re-read these)
-{file_contents_pre_read_by_leader}
-
-## CODE RULES
-{code_rules_content_or_"No code rules configured"}
-
-## COMMANDS
-Test: {testCommand}
-Lint: {lintCommand or "not configured"}
-TypeCheck: {typeCheckCommand or "not configured"}
-
-## EXECUTE THESE 5 GATES IN ORDER:
-
-### Gate 1: PLAN
-Write a 3-5 bullet implementation plan. Do not create a separate file.
-
-### Gate 2: IMPLEMENT (TDD)
-1. Write failing test(s) first (min 3: happy path + error + edge)
-2. Run: {testCommand} — verify tests fail
-3. Implement minimal code to make tests pass
-4. Run: {testCommand} — verify tests pass
+Track injected bullet IDs for micro-reflector. If ragAvailable: `rag_upsert_file` after each file written.
 
 ### Gate 3: LINT
-Run: {lintCommand} and {typeCheckCommand}
-If errors: fix and re-run (max 3 attempts). If still failing after 3: STOP and report.
 
-### Gate 4: SELF-REVIEW
-Check against acceptance criteria:
-{acceptance_criteria_from_ticket}
-Check code rules compliance. Report any issues found and fix them.
+Run: typeCheckCommand (0 errors), lintCommand (0 warnings), testCommand (0 failures). Skip unconfigured. Auto-fix max 3 attempts. After 3: mark `lint-blocked`, skip to next wave.
+
+### Gate 4: REVIEW
+
+**Pre-review** (deterministic):
+```bash
+PRE_REVIEW=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/pre_review.py" \
+  --diff-file <(git diff HEAD~1) --test-output test.log --lint-output lint.log)
+```
+If script fails: fallback to Qwen3 via llm_call.sh with `templates/pre-review.md`.
+
+**Reviewers**: Spawn from `config.reviewPipeline.reviewers` (default 2). Each uses `templates/reviewer-prefix.md` (static, cached) + dynamic suffix (code rules, diff, ticket ACs, focus assignment).
+
+**Conversation pruning**: Reviewer receives ONLY git diff + test results + ACs + pre-review checklist. NOT the full planning/implementation conversation.
+
+**Focus types**: spec, quality, security, history. SEC tickets auto-add security + history reviewers.
+**Consolidation**: Filter by confidenceThreshold. Critical/Important from required reviewers → re-review. Max maxReviewRounds then `review-blocked`.
+
+### Gate 4b: FRONTIER REVIEW (selective Opus)
+
+**Trigger** — scan diff for ANY of: SERIALIZATION (JSON.parse/stringify, Redis, Buffer, protobuf), DB_SCHEMA (Schema, createIndex, migration), AUTH (jwt, token, session, bcrypt, oauth), ERROR_HANDLING (Promise.all/allSettled, try-catch external, retry), EXTERNAL_API (HttpClient, fetch, axios), CONCURRENCY (Promise.race, worker_threads, mutex).
+
+**Skip if**: diff touches only tests/docs/config, trivial complexity, maxEscalationsPerTicket reached.
+
+Spawn ONE `Task(model:"opus", subagent_type:"code-quality")` with 6-point checklist: type safety, error propagation, production readiness, semantic correctness, resource management, backward compat. Plus own deep analysis on detected patterns.
+
+If findings: CHANGES_REQUESTED → implementer fixes → re-run Gate 4 only (NOT 4b again).
 
 ### Gate 5: COMMIT
-Stage ONLY the files you modified:
-git add {specific_files}
-git commit with conventional format: "{type}({area}): {description}\n\nCloses: {TICKET_ID}"
-
-IRON LAWS: Never use --no-verify. Never use type suppressions. Never skip hooks.
-"""
-)
-```
-
-### Escalation to Full Path
-
-If the fast-path agent fails Gate 3 (LINT) or Gate 4 (self-REVIEW) twice:
-1. Log: `"Fast path failed for {TICKET_ID} after 2 attempts. Escalating to full pipeline."`
-2. Set `ticket.computed_complexity = "complex"` (override)
-3. Ticket enters next wave via FULL PATH
-4. Increment `stats.fastPathEscalations`
-
-### Fast Path Cost Tracking
-
-After fast-path completion, log to usage-ledger.jsonl:
-```json
-{"ticket_id": "{id}", "pipeline": "fast", "gates_passed": 5, "model": "sonnet", "cost_usd": 0.XX, "escalated_to_full": false}
-```
-
----
-
-## Investigator Protocol
-
-When ticket marked `needs-investigation`: read ticket + reason, analyze code in depth, write findings under `## Investigation`, change status to `ready-to-implement`. Ticket returns to queue in next wave.
-
----
-
-## Phase 4: Enrich, Track Cost & Move
-
-After commit, perform three actions: enrich ticket, track costs, move to completed.
-
-### 4.1 Enrich Ticket
-
-Update frontmatter: `status: completed, completed: {date}, implemented_by: backlog-implementer-v8, review_rounds, tests_added, files_changed, commit: {hash}`. Add sections: Plan, Tests, Review Rounds, Lint Gate results, Commit info.
-
-### 4.2 Track Actual Cost & Cache Efficiency
-
-**Token collection**: Capture `total_tokens`, `tool_uses`, and cache metrics from each subagent's Task response metadata. Track per ticket by gate (plan/implement/lint/review/commit) with total_input, total_output, total, cache_read_tokens, cache_hit_rate.
-
-**Cost calculation** — Bedrock cross-region pricing ($/MTok): Opus in=$5.50/out=$27.50, Sonnet in=$3.30/out=$16.50, Haiku in=$1.10/out=$5.50. `cost_usd = (total_input / 1M * in_price) + (total_output / 1M * out_price)`. Cache reduces effective input cost: cached tokens cost 90% less on Anthropic API.
-
-**Add `## Actual Cost` section to completed ticket** with: model, input/output/total tokens, cache_hit_rate, cost_usd, review rounds, lint retries, and a breakdown-by-phase table (plan/implement/lint/review/commit with tokens, cache%, and cost). If ticket had a `## Cost Estimate`, calculate `estimate_accuracy = 1 - abs(actual - estimated) / estimated` and append estimated cost + accuracy.
-
-### 4.3 Update Cost History (ACE feedback loop)
-
-After computing actual cost, update cost-history.json via cost_history.py:
 
 ```bash
-python3 -c "
-import sys; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}')
-from scripts.ops.cost_history import add_entry
-add_entry('.claude/cost-history.json', {
-  'ticket_id': '{ticket_id}', 'ticket_type': '{type}',
-  'complexity': '{computed_complexity}', 'pipeline': '{fast_or_full}',
-  'files_modified': {N}, 'files_created': {N}, 'tests_added': {N},
-  'total_tokens': {total_tokens}, 'cost_usd': {cost_usd},
-  'model_breakdown': {model_dict}, 'review_rounds': {N},
-  'gates_passed_first_try': {gates_ok}, 'date': '{date}'
-})"
+COMMIT_MSG=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/commit_msg.py" \
+  --type "$TYPE" --area "$AREA" --ticket "$TICKET_ID" --summary "$SUMMARY")
+git add {specific_files} && git commit -m "$COMMIT_MSG"
 ```
-
-This auto-recalculates rolling averages by type, complexity, and pipeline. Feeds back to `backlog-ticket` for better future estimates and to the complexity classifier for accuracy tracking.
-
-### 4.4 Update State & Move
-
-Increment `state.stats.totalTokensUsed` and `totalCostUsd`. Move: `mv {dataDir}/pending/TICKET.md -> {dataDir}/completed/`
+Verify: `git log -1 --oneline`. Clear context: `clear_backlog_context`.
 
 ---
 
-## Phase 5: Cleanup
+## FAST PATH (trivial/simple tickets)
 
-SendMessage `shutdown_request` to each teammate, wait for response. TeamDelete(). Save state to `.claude/implementer-state.json`.
+Leader pre-loads: ticket content, affected files, code rules, test/lint/typecheck commands, RAG context.
+
+```
+Task(
+  subagent_type: {routed_type},
+  model: "sonnet",
+  prompt: Read templates/fast-path-agent.md with placeholders filled
+)
+```
+
+**Escalation**: If fast-path agent fails Gate 3 or Gate 4 twice → set complexity="complex", route to full path next wave, increment `stats.fastPathEscalations`.
+
+Log: `{"ticket_id":"{id}","pipeline":"fast","model":"sonnet","cost_usd":X,"escalated_to_full":false}`
 
 ---
 
-## Phase 6: Wave Summary & Session Management
+## INVESTIGATOR
 
-Delegate log writing to a write-agent, check session limits, then print banner.
+When ticket marked `needs-investigation`: read ticket + reason, analyze code, write `## Investigation`, change status to `ready-to-implement`. Returns to queue next wave.
 
-```
-Task(
-  subagent_type: "general-purpose",
-  model: "haiku",
-  prompt: """
-You are a write-agent. Append a wave summary entry to .backlog-ops/wave-log.md using the Write tool.
-Do NOT output the content in your response.
+---
 
-Create or append to: .backlog-ops/wave-log.md
+## WAVE END
 
-Entry to append:
-## Wave {N} — {YYYY-MM-DD HH:mm}
-- Tickets: {completed}/{attempted} | Failed: {failed_list}
-- Tests added: {N} | Review rounds (avg): {avg}
-- Agents: {agent_breakdown} | LLM overrides: {count}
-- Findings: {total} ({filtered} filtered) | Avg confidence: {avg}%
-- Tokens: {wave_total_tokens} | Cost: ${wave_cost_usd} | Session total: ${session_total_cost_usd}
-- Models used: {model_breakdown} (e.g. "free:3, haiku:8, sonnet:4, opus:0")
-- Ollama calls: {ollama_success}/{ollama_total} ({ollama_fallback} fell back to cloud)
-
-After writing, return ONLY:
-{"file": ".backlog-ops/wave-log.md", "lines": N, "status": "ok"}
-"""
-)
+```bash
+RESULT=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/wave_end.py" <<< "$WAVE_DATA_JSON")
 ```
 
-### Micro-Reflection (v8.0 — ACE-inspired)
+Handles: enrich tickets, track cost (cost_history.py), move pending→completed, write wave-log.md, run micro_reflect, check session limit.
 
-After the write-agent completes, if `.claude/playbook.md` exists, run micro-reflection:
+**Phase 5 CLEANUP** (requires LLM orchestration):
+SendMessage `shutdown_request` to each teammate. Wait for response. TeamDelete. Save state.
 
-1. Collect wave outcomes: completed/failed tickets, gate failures, escalations, cost
-2. Read playbook bullets that were injected this wave (tracked in wave context)
-3. Spawn Haiku reflector:
-
-```
-Task(
-  subagent_type: "general-purpose",
-  model: "haiku",
-  prompt: """
-Analyze this wave's outcomes and tag playbook bullets.
-
-## Wave Results
-- Tickets: {completed}/{attempted}
-- Gates failed: {gate_failures_with_reasons}
-- Escalations: {fast_path_escalations}
-- Models used: {model_breakdown}
-- Cost: ${wave_cost}
-
-## Current Playbook Bullets Used This Wave
-{bullets_referenced_with_ids}
-
-## Instructions
-1. Tag each referenced bullet: helpful, harmful, or neutral
-2. If a gate failed, identify root cause and propose 1 new bullet (ADD)
-3. If fast-path escalated, explain why classifier was wrong
-4. Max 3 tags + 1 new bullet per wave
-
-Return JSON:
-{"bullet_tags": [{"id": "strat-00001", "tag": "helpful"}],
- "new_bullets": [{"section": "Common Mistakes", "content": "..."}],
- "reasoning": "..."}
-"""
-)
-```
-
-4. Parse JSON response
-5. Apply counter updates: `python3 -c "from scripts.ops.playbook_utils import update_counters; update_counters('.claude/playbook.md', {tags})"`
-6. Apply new bullets: `python3 -c "from scripts.ops.playbook_utils import add_bullet; add_bullet('.claude/playbook.md', '{section}', '{content}')"`
-7. Log: `"Micro-reflection: tagged {N} bullets, added {M} new insights"`
-
-If playbook.md doesn't exist or reflector fails: skip silently (non-blocking).
-
-After micro-reflection, print this banner:
-
+**Banner**:
 ```
 ═══ WAVE {N} COMPLETE ═══
-Tickets: {completed}/{attempted} | Tests: +{N} | Cost: ${wave_cost_usd}
-Pipeline: fast:{fast_count} full:{full_count} | Escalations: {fastPathEscalations}
-Models: free:{N} haiku:{N} sonnet:{N} opus:{N} | Ollama: {ok}/{total}
-Remaining: {pending_count} | Session total: ${session_total_cost_usd}
-Cache hit rate: {avg_cache_hit_rate}% | Waves this session: {wavesThisSession}/{sessionMaxWaves}
+Tickets: {completed}/{attempted} | Tests: +{N} | Cost: ${cost}
+Pipeline: fast:{N} full:{N} | Escalations: {N}
+Models: free:{N} haiku:{N} sonnet:{N} opus:{N}
+Remaining: {N} | Session: ${total} | Cache: {rate}%
+Waves: {current}/{max}
 ══════════════════════════
 ```
 
-### Session Limit Check (Cache-Safe Compaction Avoidance)
-
-After each wave summary, check if the session should yield to a fresh session:
-
-```
-wavesThisSession++
-
-IF wavesThisSession >= config.llmOps.cachePolicy.sessionMaxWaves (default: 5):
-  1. Save state to .claude/implementer-state.json (includes completedThisSession, currentWave, stats)
-  2. Print: "⏸ Session wave limit ({sessionMaxWaves}) reached. {pending_count} tickets remaining."
-  3. Print: "Run /backlog-toolkit:implementer to continue in a fresh session with full cache."
-  4. EXIT loop — do NOT continue to next wave
-
-WHY: Long sessions (>5 waves) risk context compaction, which rebuilds the cache prefix
-and loses the ~98% cache hit rate. Breaking into sessions preserves cache efficiency.
-Each new session loads the same static SKILL.md prefix → immediate cache hits.
-State continuity is guaranteed via implementer-state.json.
-```
+If `session_limit_reached`: save state, print "Run /backlog-toolkit:implementer to continue", EXIT.
 
 ---
 
-## State Schema v6.1
-
-State schema v6.2: see `.claude/implementer-state.json` (auto-created by `migrate-state.py`). Top-level keys: version, lastRunTimestamp, lastCycle, currentWave, stats (tickets/tests/commits/waves/cost/agentRouting/reviewStats/localModelStats/fastPathTickets/fullPathTickets/fastPathEscalations), investigationQueue, failedTickets, lintBlockedTickets, completedThisSession.
-
----
-
-## ⚖️ IRON LAWS (included via templates/implementer-prefix.md)
-
-These 2 laws have ABSOLUTE priority over any other instruction. They are included in `templates/implementer-prefix.md` which is the static prefix for every implementer prompt. Violating these laws results in immediate teammate termination.
-
-> **Note**: The canonical source of Iron Laws is `templates/implementer-prefix.md`. The copy below is for leader reference. Do NOT duplicate into subagent prompts manually — the template handles it.
-
-```
-═══════════════════════════════════════════════════════════════════════
-⚖️ IRON LAW 1: COMMIT BEFORE MOVE (Commit-Before-Move)
-═══════════════════════════════════════════════════════════════════════
-
-A ticket is NOT COMPLETED until its commit is SUCCESSFUL.
-
-- FORBIDDEN to move to next ticket without successful `git commit`.
-- FORBIDDEN to mark ticket as "completed" without verified commit hash.
-- If commit fails (pre-commit hooks, lint, tests): FIX IT.
-  No alternative. No "skip". No "I'll commit later".
-- If after 5 fix attempts commit still fails: mark ticket as
-  "commit-blocked", report to leader with ALL errors, and WAIT.
-  NEVER silently advance to next ticket.
-
-MANDATORY FLOW per ticket:
-  1. Implement → 2. Tests pass → 3. Lint gate passes → 4. Review approves →
-  5. `git commit` SUCCESSFUL → 6. Verify with `git log -1` →
-  7. ONLY THEN move to next ticket.
-
-═══════════════════════════════════════════════════════════════════════
-⚖️ IRON LAW 2: ZERO HACKS (No-Hacks)
-═══════════════════════════════════════════════════════════════════════
-
-Rules, hooks, and quality gates EXIST to protect the codebase.
-NEVER seek ways to bypass them.
-
-CATEGORICALLY FORBIDDEN:
-  - `git commit --no-verify` or any flag that skips hooks
-  - Any language-specific type suppression (ts-ignore, type: ignore, etc.)
-  - Any linter suppression (eslint-disable, noqa, etc.)
-  - Renaming files to evade detection patterns
-  - Empty try-catch blocks to silence errors
-  - Creating wrappers that hide violations
-  - Marking tickets "completed" without actual commit
-
-If a rule seems impossible to comply with:
-  1. STOP implementation
-  2. Report to leader: "Rule X seems incompatible with [specific case]"
-  3. WAIT for leader decision (who may authorize documented exception)
-  4. NEVER unilaterally decide to skip a rule
-
-The correct attitude when a hook blocks is NOT "how do I bypass it?"
-but "what is it telling me is wrong with my code?"
-═══════════════════════════════════════════════════════════════════════
-```
-
-### Context Management (included via templates/implementer-prefix.md)
-
-> Canonical source: `templates/implementer-prefix.md`. Repeated here for leader reference.
-
-```
-CONTEXT RULES — keep context lean to reduce cost:
-- After reading a file >100 lines: extract ONLY relevant lines/functions.
-  State: "Read [path] ([N] lines). Relevant: lines X-Y" then quote only those.
-- After running tests: keep ONLY failure lines + summary count.
-  Discard all PASS output. State: "Tests: X passed, Y failed. Failures: [list]"
-- After grep/glob: keep ONLY matching results (max 20 lines).
-- NEVER quote full file contents in reasoning. Summarize findings.
-- When processing batch tickets: reuse file reads across tickets in the batch.
-```
-
-### Leader Enforcement
-
-1. **Post-ticket verification**: After each ticket, leader runs `git log -1 --oneline` to confirm commit exists.
-2. **Hack detection**: If implementer "fixes" issues with type suppression or linter bypass → REJECT immediately.
-3. **Commit-blocked**: If 5 attempts fail, leader can: assign investigator, reassign to another implementer, or mark `commit-blocked` and continue.
+## IRON LAWS → Canonical source: `templates/implementer-prefix.md`
+## CONTEXT MANAGEMENT → Canonical source: `templates/implementer-prefix.md`
+## STATE → Schema v6.3. See `scripts/implementer/migrate-state.py`. Keys: version, lastRunTimestamp, currentWave, stats (tickets/tests/commits/waves/cost/agentRouting/reviewStats/localModelStats/fastPathTickets/fullPathTickets/fastPathEscalations), investigationQueue, failedTickets, completedThisSession.
 
 ---
 
-## Constraints
+## CONSTRAINTS
 
-**DO**: Create team per wave, TDD (tests first), commit after each ticket, verify commit before advancing, fix hook failures, report blocks and wait, lint before review, max 3 review rounds, move to completed/ after commit, read rules from config, skip unconfigured gates.
-**DO NOT**: Implement code directly (you are leader), code without tests, accumulate multi-ticket changes, advance without commit, `--no-verify`, hack around rules, send to review with errors, infinite review loop, leave in pending/, hardcode rules, fail on missing optional commands.
+**DO**: Team per wave, TDD (tests first), commit per ticket, verify commit, fix hook failures, lint before review, max 3 review rounds, move to completed/, read config, skip unconfigured gates.
+**DON'T**: Implement directly, code without tests, multi-ticket changes, advance without commit, --no-verify, hack rules, review with errors, infinite review loop, hardcode rules.
 
 ---
 
-## Start
+## START
 
-1. Read `backlog.config.json` and code rules file
-2. Load state and count pending tickets
-3. Show banner with stats
-4. Health checks (if configured)
-5. Loop: wave selection → team → orchestrate → enrich → cleanup → repeat
-6. **Loop until: pending directory is empty**
+1. `bash startup.sh` → parse config, tickets, capabilities
+2. Loop: `wave_plan.py` → route pipeline → gates → `wave_end.py` → repeat
+3. Until: pending empty OR session limit reached
