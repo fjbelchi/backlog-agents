@@ -200,3 +200,49 @@ Output as structured markdown with scores table.
 ### Phase 5: Final Report
 Combine cost data + quality scores into final report:
 `.backlog-ops/benchmarks/{run_id}/report.md`
+
+---
+
+## Mode: COMPARE (side-by-side two runs)
+
+1. Parse two run IDs from args
+2. Read both reports:
+   - `.backlog-ops/benchmarks/{run-a}/report.md`
+   - `.backlog-ops/benchmarks/{run-b}/report.md`
+3. Spawn Haiku to generate comparison:
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "haiku",
+  prompt: """
+Generate a side-by-side comparison of two benchmark runs.
+
+## Run A: {run_a_id}
+{report_a_content}
+
+## Run B: {run_b_id}
+{report_b_content}
+
+Write comparison to .backlog-ops/benchmarks/compare-{a}-vs-{b}.md with:
+1. ## Cost Comparison — side-by-side table
+2. ## Quality Comparison — scores delta (if available)
+3. ## Model Mix — which used more/less of each model
+4. ## Recommendation — which variant is better (cost-adjusted quality)
+"""
+)
+```
+
+---
+
+## Constraints
+
+**DO**: Query Postgres via benchmark_capture.sh, save all data to .backlog-ops/benchmarks/, use Opus only for baseline, Sonnet only for quality eval, Haiku for everything else.
+**DO NOT**: Implement code directly, modify the project under test, run benchmarks without capturing start snapshot, skip the Opus baseline in RUN mode.
+
+## Start
+
+1. Parse mode from command args
+2. Resolve CLAUDE_PLUGIN_ROOT (same as implementer Phase 0.5)
+3. Verify Postgres is reachable: `bash benchmark_capture.sh snapshot`
+4. Execute the appropriate mode
