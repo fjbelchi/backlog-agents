@@ -425,6 +425,23 @@ Spawn teammates via Task tool (model: "sonnet" by default):
    name: "investigator"
 ```
 
+### Context Pre-Loading (v8.0 optimization)
+
+Before spawning implementers, the leader pre-reads all affected files for every ticket in the wave:
+
+```
+For each ticket in wave:
+  affected_content[ticket_id] = {}
+  For each file in ticket.affected_files:
+    affected_content[ticket_id][file] = Read(file)
+```
+
+Pass `affected_content[ticket_id]` in each implementer's prompt instead of letting subagents read files themselves. This eliminates 30-40 redundant Haiku file-read calls per wave.
+
+### Coordination Cap (v8.0)
+
+Maximum 5 coordination tool calls (TaskCreate, TaskUpdate, SendMessage) per wave for non-implementation work. Beyond 5, batch remaining status updates into a single summary message at wave end. This reduces the ~40 coordination-only API calls observed in v7.0 benchmarks.
+
 ---
 
 ## Phase 3: Quality Gates (per ticket)
@@ -554,6 +571,14 @@ Reviewer prompt construction:
 
 - Each reviewer evaluates from their configured `focus` perspective
 - Each reviewer scores findings 0-100 confidence
+
+**Conversation pruning (v8.0):** The reviewer agent receives ONLY:
+- Git diff of changes (`git diff HEAD~1`)
+- Test results summary (pass/fail counts + failure details)
+- Original ticket ACs
+- Pre-review checklist (if available from Qwen3)
+
+It does NOT receive the full planning/implementation conversation. This prevents the 44K→99K prompt growth observed in v7.0 benchmarks.
 
 **Focus types:** spec (ACs met?), quality (DRY/readability), security (OWASP/input validation/auth/secrets), history (regression risk/pattern consistency)
 
