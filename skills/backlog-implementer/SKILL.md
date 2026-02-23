@@ -224,12 +224,22 @@ Read prefixes from `config.backlog.ticketPrefixes`. Default: SEC->P0, BUG->P1, Q
 ## MAIN LOOP
 
 ```
-PHASE 0: STARTUP → load config + codeRules + state (dynamic context), cache health check, show banner
+PHASE 0: STARTUP → load config + codeRules + state, cache health, classify tickets, show banner
 PHASE 0.5: DETECT CAPABILITIES → scan plugins + MCP servers, log capabilities
 WHILE pending_tickets_exist() AND wavesThisSession < sessionMaxWaves: cycle++
   PHASE 1: WAVE SELECTION → top 10 by priority, analyze blast radius, select 2-3 compatible slots
+  PHASE 1.5: ROUTE PIPELINE →
+    IF all wave tickets have computed_complexity in (trivial, simple):
+      → FAST PATH: run each ticket through single-agent pipeline (no team)
+      → Skip Phase 2-3, use "Fast Path" section instead
+    ELSE IF mix of simple + complex:
+      → Run simple tickets via FAST PATH first (sequentially)
+      → Then run complex tickets via FULL PATH (team-based)
+    ELSE:
+      → FULL PATH (existing v7.0 team pipeline)
+  [FULL PATH only:]
   PHASE 2: CREATE TEAM → TeamCreate, spawn implementers + reviewer + investigator
-  PHASE 3: ORCHESTRATE → per ticket: 3a PLAN → 3b IMPLEMENT (TDD) → 3c LINT → 3d REVIEW → 3e COMMIT
+  PHASE 3: ORCHESTRATE → per ticket: 3a PLAN → 3b IMPLEMENT → 3c LINT → 3d REVIEW → 3e COMMIT
   PHASE 4: VERIFY & ENRICH & MOVE → git log -1 confirms, enrich ticket, mv to completed/
   PHASE 5: CLEANUP → shutdown teammates, TeamDelete, save state
   PHASE 6: WAVE SUMMARY → delegate log to write-agent, print banner, check session limits
