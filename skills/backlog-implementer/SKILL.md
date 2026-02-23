@@ -301,7 +301,12 @@ All project-specific data is loaded here — NOT at skill prompt load time. This
    Override: if ticket has explicit `complexity:` field in frontmatter, use that instead.
    Store as `ticket.computed_complexity`. Log: `"Classified {TICKET_ID}: {complexity} (source: {qwen3|heuristic|manual})"`
 
-8. Show startup banner with stats
+8. **Load playbook** (if `.claude/playbook.md` exists):
+   Parse with `python3 scripts/ops/playbook_utils.py stats .claude/playbook.md`.
+   Log: `"Playbook: {total} bullets ({high_performing} high, {problematic} problematic)"`.
+   Auto-prune: run `python3 -c "from scripts.ops.playbook_utils import prune_playbook; prune_playbook('.claude/playbook.md')"`.
+   If playbook doesn't exist: log `"No playbook found. Run /backlog-toolkit:reflect to initialize."` and continue.
+9. Show startup banner with stats
 
 ---
 
@@ -510,6 +515,12 @@ The leader constructs implementer prompts using a static prefix + dynamic suffix
       {FULL CONTENT OF THE CODE RULES FILE}
       HARD GATES (block commit): {config.codeRules.hardGates}
       SOFT GATES (review + justify): {config.codeRules.softGates}
+   a2. PLAYBOOK CONTEXT (ACE-inspired learning)
+      If playbook loaded in Phase 0, select relevant bullets:
+      `python3 -c "from scripts.ops.playbook_utils import select_relevant; ..."`
+      Match by ticket_type, tags, affected_files. Inject top-K (K=10) as:
+      "## Learned Strategies (from project playbook)\n{selected_bullets}"
+      Track which bullet IDs were injected (for micro-reflector in Phase 6).
    b. CATALOG DISCIPLINES (CAT-TDD + type-specific catalogs)
    c. RAG CONTEXT (recurring patterns + code snippets, if available)
    d. TICKET CONTENT (the full ticket .md)
