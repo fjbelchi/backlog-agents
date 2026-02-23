@@ -15,14 +15,13 @@ allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete
 model: "haiku"   → DEFAULT for implementers, investigators, write-agents,
                    wave planning subagents. Cost-optimized tier.
 
-model: "sonnet"  → REVIEWERS ONLY. All Gate 4 review subagents use Sonnet
-                   for higher-quality defect detection.
+model: "sonnet"  → FAST PATH single-agent (trivial/simple tickets).
+                   Also: REVIEWERS in full path (Gate 4).
 
 ESCALATION to parent model (omit model: parameter):
   - Ticket tagged ARCH or SECURITY
   - qualityGateFails >= 2 for a ticket
-  - ticket.complexity == "high"
-  In these cases, the subagent inherits the parent model.
+  - ticket.computed_complexity == "complex" AND qualityGateFails >= 1
 
 OLLAMA (free tier, via llm_call.sh):
   - Ticket complexity classification (Phase 0)
@@ -110,14 +109,27 @@ Before each LLM call, select the model tier using escalation rules:
 2. Check gate fail count: qualityGateFails >= 2 → "frontier"
 3. Check ticket.complexity == "high" → "frontier"
 4. Use gate default:
-   Wave Plan  → config.llmOps.routing.entryModelPlan      (default: "free" via llm_call.sh)
-   Gate 1 PLAN      → config.llmOps.routing.entryModelPlan (default: "free" via llm_call.sh)
-   Gate 2 IMPLEMENT → config.llmOps.routing.entryModelImplement  (default: "cheap")
-   Gate 3 LINT      → always "cheap" (runs tools, LLM analyzes output)
-   Gate 4 REVIEW    → config.llmOps.routing.entryModelReview     (default: "balanced")
-   Gate 4b FRONTIER → config.llmOps.routing.escalationModel     (default: "frontier") — selective, only high-risk
-   Gate 5 COMMIT    → "free" via llm_call.sh (template fallback if Ollama unavailable)
+   FAST PATH    → "sonnet" (single agent, all gates inline)
+   Wave Plan    → "free" via llm_call.sh (fallback: haiku subagent)
+   Classify     → "free" via llm_call.sh (fallback: heuristic)
+   Pre-Review   → "free" via llm_call.sh (fallback: skip)
+   Gate 1 PLAN  → "free" via llm_call.sh (fallback: haiku subagent)
+   Gate 2 IMPL  → "cheap" (haiku)
+   Gate 3 LINT  → "cheap" (haiku)
+   Gate 4 REVIEW→ "balanced" (sonnet)
+   Gate 4b      → "frontier" (opus, selective)
+   Gate 5 COMMIT→ "free" via llm_call.sh (fallback: template)
 ```
+
+### v8.0 Projected Cost Model
+
+| Ticket Type | v7.0 Cost | v8.0 Cost | Savings | Pipeline |
+|-------------|-----------|-----------|---------|----------|
+| trivial     | $1.50-2.50 | $0.10-0.25 | 85-93% | fast path |
+| simple      | $1.50-2.50 | $0.25-0.50 | 67-90% | fast path |
+| complex     | $2.00-4.00 | $1.50-3.00 | 25-50% | full path |
+
+Based on benchmark: AUDIT-BUG-20260220-003 (simple bug fix) cost $2.04 on v7.0 vs projected $0.25-0.50 on v8.0 fast path.
 
 Model aliases resolve via LiteLLM config: `free` → Ollama qwen3-coder, `cheap` → Haiku, `balanced` → Sonnet, `frontier` → Opus.
 
