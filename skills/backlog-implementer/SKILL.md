@@ -1,10 +1,10 @@
 ---
 name: backlog-implementer
-description: "Implement backlog tickets with Agent Teams, wave parallelization, 5 quality gates (Plan→TDD→Lint→Review→Commit), smart agent routing, embedded skill catalog (7 disciplines), configurable review pipeline with confidence scoring, 2 Iron Laws, ticket enrichment, and cost tracking. Config-driven and stack-agnostic. v7.0."
+description: "Implement backlog tickets with adaptive pipeline (complexity classifier → fast-path or full pipeline), Agent Teams, wave parallelization, 5 quality gates (Plan→TDD→Lint→Review→Commit), smart agent routing, embedded skill catalog (7 disciplines), configurable review pipeline with confidence scoring, 2 Iron Laws, ticket enrichment, and cost tracking. Config-driven and stack-agnostic. v8.0."
 allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, TaskUpdate, TaskGet
 ---
 
-# Backlog Implementer v7.0 — Smart Agent Routing + Embedded Skill Catalog + Configurable Reviews
+# Backlog Implementer v8.0 — Adaptive Pipeline + Smart Agent Routing + Configurable Reviews
 
 ## Role
 **Leader coordinator**: Selects waves, creates teams, orchestrates quality gates. **DOES NOT implement code directly.**
