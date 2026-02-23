@@ -75,3 +75,128 @@ Format as markdown with:
 ```
 
 Print summary banner after report is written.
+
+---
+
+## Mode: START (mark benchmark beginning)
+
+1. Parse benchmark name from args (default: timestamp-based ID)
+2. Create directory: `.backlog-ops/benchmarks/{name}/`
+3. Capture snapshot:
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/benchmark_capture.sh" snapshot \
+     > .backlog-ops/benchmarks/{name}/start.json
+   ```
+4. Print: `"Benchmark '{name}' started. Baseline: $X spend, N requests."`
+5. Print: `"Run your skill now. When done: /backlog-toolkit:benchmark stop {name}"`
+
+---
+
+## Mode: STOP (mark benchmark end + generate report)
+
+1. Parse benchmark name from args
+2. Read `.backlog-ops/benchmarks/{name}/start.json`
+3. Capture end snapshot:
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/benchmark_capture.sh" snapshot \
+     > .backlog-ops/benchmarks/{name}/stop.json
+   ```
+4. Calculate deltas: end - start for spend, requests, tokens
+5. Get per-model breakdown for the delta:
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/benchmark_capture.sh" \
+     breakdown {start_row_count} > .backlog-ops/benchmarks/{name}/breakdown.json
+   ```
+6. Generate report via Haiku write-agent with delta data
+7. Write to `.backlog-ops/benchmarks/{name}/report.md`
+8. Print summary banner with cost, requests, model mix
+
+---
+
+## Mode: RUN (full benchmark with Opus baseline)
+
+### Phase 1: Setup
+1. Parse ticket ID from args
+2. Read ticket from `{dataDir}/pending/{ticket_id}.md` or `{dataDir}/completed/{ticket_id}.md`
+3. Create benchmark dir: `.backlog-ops/benchmarks/{ticket_id}-{YYYYMMDD-HHmm}/`
+4. Capture start snapshot (same as START mode)
+
+### Phase 2: Opus Baseline
+Spawn one Opus agent to solve the ticket as quality reference:
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "opus",
+  prompt: """
+You are creating a REFERENCE SOLUTION for benchmarking purposes.
+
+## Ticket
+{full_ticket_markdown}
+
+## Instructions
+1. Read all affected files listed in the ticket
+2. Implement the fix/feature described
+3. Write tests (min 3: happy path + error + edge)
+4. Do NOT commit — write your solution files to:
+   .backlog-ops/benchmarks/{run_id}/opus-baseline/
+   Use the same relative paths as the original files.
+
+Write the implementation files and test files only. No other output needed.
+"""
+)
+```
+
+Capture post-Opus snapshot. Calculate Opus cost = post_opus - start.
+
+### Phase 3: Await Skill Execution
+Print: `"Opus baseline captured (${opus_cost}). Now run the skill under test."`
+Print: `"When done: /backlog-toolkit:benchmark stop {run_id}"`
+
+The STOP command will handle Phase 4-6 when the user triggers it.
+When STOP is called for a RUN benchmark (detected by presence of opus-baseline/):
+
+### Phase 4: Quality Comparison
+After STOP captures the skill's cost delta, compare quality:
+
+1. Find files modified since benchmark start in the project
+2. Diff against Opus baseline files
+3. Run automated checks:
+   - `{testCommand}` → tests pass?
+   - `{lintCommand}` → lint clean?
+   - Parse ticket ACs → covered?
+
+4. Spawn Sonnet evaluator:
+
+```
+Task(
+  subagent_type: "code-quality",
+  model: "sonnet",
+  prompt: """
+Compare two implementations of the same ticket.
+
+## Ticket
+{ticket_summary_and_ACs}
+
+## Implementation A (Opus Baseline)
+{opus_files_content}
+
+## Implementation B (Skill Under Test)
+{skill_files_content}
+
+## Evaluate on these dimensions (score 0-100 each):
+1. Correctness: Does the code fix the issue?
+2. Test coverage: ACs covered? Edge cases?
+3. Code style: Consistent with codebase? Clean?
+4. Completeness: Nothing missing?
+5. No regressions: Any new issues introduced?
+
+Also note: specific differences between A and B, which is better and why.
+Output as structured markdown with scores table.
+"""
+)
+```
+
+### Phase 5: Final Report
+Combine cost data + quality scores into final report:
+`.backlog-ops/benchmarks/{run_id}/report.md`
