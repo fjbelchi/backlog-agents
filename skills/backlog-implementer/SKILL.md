@@ -815,9 +815,25 @@ Update frontmatter: `status: completed, completed: {date}, implemented_by: backl
 
 **Add `## Actual Cost` section to completed ticket** with: model, input/output/total tokens, cache_hit_rate, cost_usd, review rounds, lint retries, and a breakdown-by-phase table (plan/implement/lint/review/commit with tokens, cache%, and cost). If ticket had a `## Cost Estimate`, calculate `estimate_accuracy = 1 - abs(actual - estimated) / estimated` and append estimated cost + accuracy.
 
-### 4.3 Update Cost History
+### 4.3 Update Cost History (ACE feedback loop)
 
-Read `.claude/cost-history.json` (create if missing). Append entry with: ticket_id, type, files_modified, files_created, tests_added, input/output/total tokens, cost_usd, model, review_rounds, date. Recalculate averages (tokens per file modified/created, tokens per test, overhead multiplier) from ALL entries. This feeds back to `backlog-ticket` for better future estimates.
+After computing actual cost, update cost-history.json via cost_history.py:
+
+```bash
+python3 -c "
+import sys; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}')
+from scripts.ops.cost_history import add_entry
+add_entry('.claude/cost-history.json', {
+  'ticket_id': '{ticket_id}', 'ticket_type': '{type}',
+  'complexity': '{computed_complexity}', 'pipeline': '{fast_or_full}',
+  'files_modified': {N}, 'files_created': {N}, 'tests_added': {N},
+  'total_tokens': {total_tokens}, 'cost_usd': {cost_usd},
+  'model_breakdown': {model_dict}, 'review_rounds': {N},
+  'gates_passed_first_try': {gates_ok}, 'date': '{date}'
+})"
+```
+
+This auto-recalculates rolling averages by type, complexity, and pipeline. Feeds back to `backlog-ticket` for better future estimates and to the complexity classifier for accuracy tracking.
 
 ### 4.4 Update State & Move
 
