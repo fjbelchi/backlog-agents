@@ -1,54 +1,99 @@
-# Backlog Implementer Skill
+# Backlog Implementer Skill v9.0
 
 ## Purpose
 
-Orchestrates ticket implementation with adaptive pipeline routing, Agent Teams, wave parallelization, and 5 quality gates. Config-driven and stack-agnostic. v8.0.
+Orchestrates ticket implementation with adaptive pipeline, script delegation, 5 quality gates, and smart agent routing. v9.0 reduced SKILL.md from 1055→288 lines (73% token reduction) by replacing 7 LLM calls with deterministic scripts.
 
 ## Architecture
 
-### Adaptive Pipeline (v8.0)
+### v9.0 Changes (from v8.0)
 
-Tickets are classified in Phase 0 by complexity (trivial/simple/complex) using Qwen3 classifier with heuristic fallback. Pipeline routes accordingly:
+- **Script delegation**: 7 LLM calls replaced with Python/bash scripts ($0 cost, 0 tokens)
+- **Template extraction**: 4 inline prompts moved to template files (loaded on-demand)
+- **Prompt compression**: Tables replace prose, duplicates removed, "why" commentary moved here
 
-- **Fast Path** (trivial/simple): Single Sonnet agent runs all 5 gates inline. No team creation overhead. Expected cost: $0.10-0.50 per ticket.
-- **Full Path** (complex): Team-based pipeline with Haiku implementers, Sonnet reviewers, and optional Opus frontier review. Expected cost: $1.50-3.00 per ticket.
+### Adaptive Pipeline
+
+Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Routes:
+
+- **Fast Path** (trivial/simple): Single Sonnet agent, all 5 gates inline. $0.10-0.50/ticket.
+- **Full Path** (complex): Team-based with Haiku implementers, Sonnet reviewers, optional Opus frontier. $1.50-3.00/ticket.
 
 ### Quality Gates
 
-5 sequential gates per ticket: Plan → TDD → Lint → Review → Commit
+5 sequential gates: Plan → TDD → Lint → Review → Commit
+
+### Script Layer
+
+| Script | Replaces | Cost |
+|--------|----------|------|
+| `scripts/implementer/startup.sh` | Phase 0+0.5 (114 lines bash) | $0 |
+| `scripts/implementer/classify.py` | Qwen3 complexity classifier | $0 |
+| `scripts/implementer/wave_plan.py` | Qwen3/Haiku wave planning | $0 |
+| `scripts/implementer/commit_msg.py` | Qwen3 commit message gen | $0 |
+| `scripts/implementer/pre_review.py` | Qwen3 pre-review checklist | $0 |
+| `scripts/implementer/micro_reflect.py` | Haiku micro-reflector tagging | $0 |
+| `scripts/implementer/wave_end.py` | Phase 4+6 (150 lines) | $0 |
+| `scripts/implementer/enrich_ticket.py` | Leader inline enrichment | $0 |
+
+### Template Layer
+
+| Template | Purpose | Loaded When |
+|----------|---------|-------------|
+| `templates/implementer-prefix.md` | Iron Laws, TDD, context rules | Every Gate 2 |
+| `templates/reviewer-prefix.md` | Review protocol, scoring | Every Gate 4 |
+| `templates/fast-path-agent.md` | Single Sonnet agent prompt | Fast path tickets |
+| `templates/wave-summary-agent.md` | Fallback if wave_end.py fails | Error fallback |
+| `templates/micro-reflector.md` | Fallback if micro_reflect.py fails | Error fallback |
+| `templates/pre-review.md` | Fallback if pre_review.py fails | Error fallback |
 
 ### Model Routing
 
-```
-free (Ollama)  → classify, wave plan, plan text, pre-review checklist, commit msg
-cheap (Haiku)  → implementers, investigators, lint analysis
-balanced (Sonnet) → fast-path agent, reviewers
-frontier (Opus)   → selective high-risk review (Gate 4b)
-```
+| Tier | Model | Usage |
+|------|-------|-------|
+| free | Ollama qwen3-coder | Gate 1 PLAN text only (remaining calls now scripts) |
+| cheap | Haiku | Implementers, investigators |
+| balanced | Sonnet | Fast-path agent, Gate 4 reviewers |
+| frontier | Opus | Gate 4b selective high-risk review |
+
+### Gate 4b Trigger Patterns
+
+Opus frontier review triggers on: SERIALIZATION (JSON.parse, Redis, Buffer), DB_SCHEMA (createIndex, migration), AUTH (jwt, session, bcrypt), ERROR_HANDLING (Promise.all, retry), EXTERNAL_API (fetch, axios), CONCURRENCY (worker_threads, mutex). Skips: tests/docs only, trivial tickets.
+
+### Escalation Rules
+
+- ARCH or SECURITY tag → parent model
+- qualityGateFails ≥ 2 → parent model
+- complex ticket + gateFails ≥ 1 → parent model
+- Fast path: 2 fails → escalate to full path
 
 ## Key Files
 
-- `SKILL.md` — Full skill prompt (leader instructions)
-- `catalog/` — Embedded discipline catalogs (TDD, debug, arch, security, etc.)
-- `templates/` — Cache-optimized prompt prefixes for implementers and reviewers
+- `SKILL.md` — Compressed leader prompt (288 lines)
+- `catalog/` — 7 discipline catalogs (TDD, debug, arch, security, perf, frontend, review)
+- `templates/` — 6 cache-optimized prompt templates
+- `scripts/implementer/` — 9 deterministic scripts
 
 ## Cost Model
 
-| Ticket Type | Pipeline | Expected Cost |
-|-------------|----------|---------------|
-| trivial     | fast path | $0.10-0.25 |
-| simple      | fast path | $0.25-0.50 |
-| complex     | full path | $1.50-3.00 |
+| Ticket Type | Pipeline | v8.0 Cost | v9.0 Cost | Savings |
+|-------------|----------|-----------|-----------|---------|
+| trivial | fast path | $0.10-0.25 | $0.08-0.20 | ~20% |
+| simple | fast path | $0.25-0.50 | $0.20-0.40 | ~20% |
+| complex | full path | $1.50-3.00 | $1.20-2.50 | ~20% |
+
+Token savings: ~12,000 → ~3,500 tokens per invocation (71% reduction in prompt size).
 
 ## State
 
-Persists to `.claude/implementer-state.json` between sessions. Tracks: completed tickets, wave counts, cost stats, model usage, fast-path escalations.
+Schema v6.3. Persists to `.claude/implementer-state.json`. Keys: version, stats (tickets, tests, commits, waves, cost, agentRouting, reviewStats, localModelStats, fastPathTickets, fullPathTickets, fastPathEscalations), investigationQueue, failedTickets, completedThisSession.
 
 ## Dependencies
 
 - `backlog.config.json` — Project configuration
-- LiteLLM proxy — Model routing
+- LiteLLM proxy — Model routing (optional for fast-path)
 - Docker (optional) — For Ollama/Postgres access
+- Python 3 — For all script delegation
 
 <claude-mem-context>
 # Recent Activity
