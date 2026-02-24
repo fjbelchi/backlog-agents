@@ -30,8 +30,15 @@ services:
 
   # ─── LiteLLM Proxy ────────────────────────────────────────────────
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    # Fork: github.com/fjbelchi/litellm (main branch)
+    # Contains upstream main (includes PR #21706 Prisma health watchdog) +
+    # cherry-pick of PR #21899 (Prisma zombie process recovery via waitpid).
+    # Built automatically by .github/workflows/fork-build.yml on push to main.
+    # Pricing regressions are mitigated by the patched pricing file mount below.
+    image: ghcr.io/fjbelchi/litellm:main
     container_name: backlog-litellm
+    labels:
+      autoheal: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,18 +69,34 @@ services:
       - "8000:4000"
     volumes:
       - ./config/litellm/proxy-config.docker.yaml:/app/config.yaml:ro
+      # Mount patched pricing to BOTH locations:
+      # 1. /app/litellm/...backup.json — read by litellm.model_cost at import time
+      # 2. /app/model_prices_and_context_window.json — read by proxy startup during
+      #    register_model(). Without this, the image's stale primary file causes $0
+      #    spend for models not in the image's built-in pricing (e.g. Sonnet 4.6).
       - ./config/litellm/model_prices_patched.json:/app/litellm/model_prices_and_context_window_backup.json:ro
+      - ./config/litellm/model_prices_patched.json:/app/model_prices_and_context_window.json:ro
       - ./docker/certs/ca-bundle.crt:/etc/ssl/certs/ca-certificates.crt:ro
       - ./config/litellm/callbacks:/app/callbacks:ro
       - ./config/litellm/callbacks/ticket_tagger.py:/app/ticket_tagger.py:ro
+      - ./config/litellm/fix_pricing_on_startup.py:/app/fix_pricing_on_startup.py:ro
       - ${HOME}/.backlog-toolkit:/root/.backlog-toolkit:ro
     command: ["--config", "/app/config.yaml", "--detailed_debug"]
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/readiness')\" || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+      # Two-phase health check:
+      # 1. fix_pricing_on_startup.py — verifies non-zero pricing via /model/info (startup)
+      # 2. /health/readiness — verifies Prisma (DB) is alive (ongoing)
+      #
+      # Why both: /model/info succeeds even when the Prisma query engine is a zombie.
+      # /health/readiness returns 503 when Prisma is dead, enabling autoheal/restart.
+      #
+      # start_period: 90s gives LiteLLM time to run migrations + register models.
+      # After start_period, 3 consecutive failures → container marked unhealthy.
+      test: ["CMD-SHELL", "python3 /app/fix_pricing_on_startup.py && python3 -c \"import urllib.request,sys; urllib.request.urlopen('http://localhost:4000/health/readiness', timeout=5)\" 2>/dev/null"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 90s
     restart: unless-stopped
 
   # ─── RAG Server (code search) ─────────────────────────────────────
@@ -114,6 +137,21 @@ services:
       timeout: 3s
       retries: 5
     restart: unless-stopped
+
+  # ─── Autoheal (restart unhealthy containers) ──────────────────────
+  # Required because Docker's restart policy only triggers on process exit,
+  # not on healthcheck failure. Autoheal watches for unhealthy containers
+  # and restarts them. Targets only containers with label autoheal=true.
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: backlog-autoheal
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: 30
+      AUTOHEAL_START_PERIOD: 120
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   # ─── Memgraph (Phase 2: code graph analysis) ──────────────────────
   memgraph:
