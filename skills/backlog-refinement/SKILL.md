@@ -1,6 +1,6 @@
 ---
 name: backlog-refinement
-description: "Refine backlog tickets: verify code references, detect duplicates, validate completeness, update severity, generate report. Config-driven and stack-agnostic. v3.0."
+description: "Refine backlog tickets: scope audit + auto-split, verify code references, detect duplicates, validate completeness, update severity, generate report. Config-driven and stack-agnostic. v4.0."
 allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task
 ---
 
@@ -37,6 +37,74 @@ Write-agents MUST write files in chunks to avoid hitting the output token limit:
 2. Bash cat >>   → each subsequent chunk (~40-50 lines): appends sections
 Never generate more than 50 lines of file content per tool call.
 ```
+
+---
+
+## Phase 0: Scope Audit
+
+Runs before Phase 1. Scans all pending tickets for scope violations and flags candidates for split.
+
+### 0.1 Read Constraints
+
+Read `ticketConstraints` from `backlog.config.json`. Defaults:
+
+```
+maxAffectedFiles: 5
+maxEstimatedTokens: 100000
+requireSingleResponsibility: true
+```
+
+### 0.2 Scan All Pending Tickets
+
+For each `.md` file in `{dataDir}/pending/`:
+
+1. Parse frontmatter YAML
+2. Count rows in `## Affected Files` table (no content read needed — count `|` separated rows)
+3. For each file in Affected Files, run `wc -l` to get line count
+4. Calculate: `estimated_tokens = Σ(lines × 4) + 2000 + 10000`
+5. Extract all file paths → compute `scope_boundary` (longest common prefix)
+
+### 0.3 Classify Each Ticket
+
+```
+SCOPE_OK:      files ≤ max AND tokens ≤ max AND single boundary
+SCOPE_SPLIT:   any constraint violated → mark for auto-split
+```
+
+### 0.4 Report Scope Violations
+
+Print summary before proceeding:
+
+```
+Scope Audit
+-----------
+Total pending: N
+Scope-OK:      M  (proceed to Phase 1.5 as normal)
+Needs split:   K  (will be auto-split before refinement)
+
+Tickets to split:
+  FEAT-007: 8 files (max 5), ~142k tokens (max 100k) → will split into 2
+  TASK-012: mixed scope (src/auth/ + src/billing/) → will split into 2
+```
+
+### 0.5 Auto-Split Oversized Tickets
+
+For each `SCOPE_SPLIT` ticket:
+
+1. Read the ticket content
+2. Apply auto-split algorithm (same as ticket skill Phase 0.6):
+   - Detect split points: module boundaries, layers, dependency order
+   - Generate N sub-ticket contents, each satisfying constraints
+   - Sub-tickets inherit prefix: `FEAT-007` → `FEAT-007a`, `FEAT-007b`
+3. Archive original with `status: split` and add note:
+   ```yaml
+   status: split
+   split_into: [FEAT-007a, FEAT-007b]
+   ```
+4. Write new sub-ticket files using Haiku write-agent
+5. Each sub-ticket gets `estimated_tokens` and `scope_boundary` populated
+
+After split, the sub-tickets enter Phase 1 as normal.
 
 ---
 
