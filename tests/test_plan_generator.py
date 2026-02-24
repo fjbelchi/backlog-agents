@@ -115,3 +115,26 @@ def test_modify_only_ordering():
     assert r.returncode == 0, r.stderr
     assert "src/a.ts" in r.stdout
     assert "src/b.ts" in r.stdout
+
+def test_unrecognized_action_appears_in_output():
+    """Files with unrecognized actions should appear at end, not be silently dropped."""
+    ticket = textwrap.dedent("""
+    ---
+    id: FEAT-005
+    title: Mixed actions
+    ---
+    ## Affected Files
+    | File | Action | Description |
+    |------|--------|-------------|
+    | src/a.ts | create | Create a |
+    | src/b.ts | refactor | Refactor b |
+    """).strip()
+    r = run(ticket)
+    assert r.returncode == 0, r.stderr
+    assert "src/a.ts" in r.stdout
+    assert "src/b.ts" in r.stdout, "Unrecognized action 'refactor' should appear in output"
+    # create must appear before unrecognized
+    lines = r.stdout.splitlines()
+    a_idx = next((i for i, l in enumerate(lines) if "src/a.ts" in l), -1)
+    b_idx = next((i for i, l in enumerate(lines) if "src/b.ts" in l), -1)
+    assert a_idx < b_idx, "Known action (create) must appear before unrecognized (refactor)"
