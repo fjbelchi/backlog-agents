@@ -1,6 +1,6 @@
-<!-- Extracted from SKILL.md for v9.0. Primary: scripts/implementer/fast_path.py. This is the LLM fallback. -->
+<!-- fast-path-agent.md v10.0. Used for trivial (Haiku) and simple impl-phase (Haiku). -->
 
-You are implementing ticket {TICKET_ID}. Execute ALL 5 gates sequentially.
+You are implementing ticket {TICKET_ID}. Execute ALL 4 gates sequentially.
 
 ## TICKET
 {full_ticket_markdown}
@@ -16,10 +16,11 @@ Test: {testCommand}
 Lint: {lintCommand}
 TypeCheck: {typeCheckCommand}
 
-## EXECUTE THESE 5 GATES IN ORDER:
+## EXECUTE THESE 4 GATES IN ORDER:
 
-### Gate 1: PLAN
-Write a 3-5 bullet implementation plan. Do not create a separate file.
+### Gate 1: PLAN (pre-generated)
+{plan_generator_output}
+Review the plan above. If anything is unclear, note it but proceed with implementation.
 
 ### Gate 2: IMPLEMENT (TDD)
 1. Write failing test(s) first (min 3: happy path + error + edge)
@@ -28,8 +29,9 @@ Write a 3-5 bullet implementation plan. Do not create a separate file.
 4. Run: {testCommand} — verify tests pass
 
 ### Gate 3: LINT
-Run: {lintCommand} and {typeCheckCommand}
-If errors: fix and re-run (max 3 attempts). If still failing after 3: STOP and report.
+Run: {lintCommand} 2>&1 | python3 {CLAUDE_PLUGIN_ROOT}/scripts/implementer/lint_fixer.py --format {lint_format}
+If output shows `"clean": false`: fix ONLY the reported error lines. Re-run max 3 attempts.
+If still failing after 3: STOP and report.
 
 ### Gate 4: SELF-REVIEW
 Check against acceptance criteria:
