@@ -463,7 +463,7 @@ Round token counts to nearest 1000. Round costs to 2 decimal places.
 
 ## Phase 3: Validation (7 Checks)
 
-Run all 6 checks against the generated ticket. Track results as PASS, WARN, or ERROR.
+Run all 7 checks against the generated ticket. Track results as PASS, WARN, or ERROR.
 
 ### Check 1: Completeness
 
@@ -619,7 +619,7 @@ IF any check fails → trigger auto-split (Phase 0.6) and regenerate
 
 ## Phase 4: Output
 
-### All 6 Checks Pass
+### All 7 Checks Pass
 
 Spawn a haiku write-agent to generate and write the ticket file:
 
