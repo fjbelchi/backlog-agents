@@ -79,7 +79,21 @@ LiteLLM tracks costs per request. Configure `success_callback` to log to your an
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #7718 | 4:52 PM | 🔵 | LiteLLM Proxy Configuration Architecture | ~335 |
+| #7711 | " | 🔵 | LiteLLM Proxy Configuration for Docker | ~332 |
+| #7537 | 2:20 PM | ✅ | Redis Cache Enabled in LiteLLM Configuration | ~242 |
+| #7535 | " | 🔵 | LiteLLM Cache Configuration Status | ~247 |
 | #7488 | 11:39 AM | 🔵 | LiteLLM Proxy Multi-Tier Model Configuration | ~366 |
 | #7473 | 11:37 AM | 🔵 | Analyzed existing RAG and service infrastructure | ~339 |
 | #7467 | 11:36 AM | 🔵 | LiteLLM Template Configuration Strategy | ~254 |
+
+### Feb 20, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #8676 | 10:35 PM | ⚖️ | Second Benchmark Started: AUDIT-BUG-20260220-003 Implementation | ~261 |
+| #8669 | 10:26 PM | 🔴 | LiteLLM Pricing Fix Script Created | ~347 |
+| #8654 | 10:07 PM | ✅ | LiteLLM Proxy Config Updated with Explicit Pricing | ~343 |
+| #8646 | 9:54 PM | 🔴 | LiteLLM Pricing Fix Script Created | ~291 |
+| #8629 | 9:31 PM | 🔵 | LiteLLM Proxy Configuration with Tiered Model Routing | ~402 |
 </claude-mem-context>
