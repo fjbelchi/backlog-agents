@@ -388,6 +388,48 @@ done
 
 echo ""
 
+# ── ticketConstraints schema checks ──────────────────────────────────
+
+echo "-- ticketConstraints schema --"
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+assert 'ticketConstraints' in s['properties']
+" "$SCHEMA" 2>/dev/null; then
+  pass "ticketConstraints section exists in schema"
+else
+  fail "ticketConstraints section missing from schema"
+fi
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+tc = s['properties']['ticketConstraints']['properties']
+assert 'maxAffectedFiles' in tc
+assert 'maxEstimatedTokens' in tc
+assert 'requireSingleResponsibility' in tc
+" "$SCHEMA" 2>/dev/null; then
+  pass "ticketConstraints has all 3 sub-properties"
+else
+  fail "ticketConstraints missing sub-properties"
+fi
+
+if python3 -c "
+import json, sys
+s = json.load(open(sys.argv[1]))
+tc = s['properties']['ticketConstraints']['properties']
+assert tc['maxAffectedFiles']['default'] == 5
+assert tc['maxEstimatedTokens']['default'] == 100000
+assert tc['requireSingleResponsibility']['default'] == True
+" "$SCHEMA" 2>/dev/null; then
+  pass "ticketConstraints default values correct"
+else
+  fail "ticketConstraints default values wrong"
+fi
+
+echo ""
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
