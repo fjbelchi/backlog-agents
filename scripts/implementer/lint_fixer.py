@@ -47,7 +47,7 @@ def parse_tsc(raw: str) -> list[dict]:
 
 def parse_ruff(raw: str) -> list[dict]:
     errors = []
-    pattern = re.compile(r"^(.+?):(\d+):(\d+): ([A-Z]\d+) (.+)$", re.MULTILINE)
+    pattern = re.compile(r"^(.+?):(\d+):(\d+): ([A-Z]{1,4}\d+) (.+)$", re.MULTILINE)
     for m in pattern.finditer(raw):
         path, line, col, code, msg = m.group(1), int(m.group(2)), int(m.group(3)), m.group(4), m.group(5)
         errors.append({
@@ -58,6 +58,8 @@ def parse_ruff(raw: str) -> list[dict]:
     return errors
 
 def _extract_context(filepath: str, line: int, radius: int = 5) -> list[str]:
+    if line <= 0:
+        return []
     try:
         lines = Path(filepath).read_text().splitlines()
         start = max(0, line - radius - 1)
