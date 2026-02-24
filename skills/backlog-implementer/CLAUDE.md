@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Orchestrates ticket implementation with adaptive pipeline, script delegation, quality gates, and smart agent routing. v10.0 eliminates Opus, scripts Gate 1, and routes trivial/simple tickets to Haiku for significant cost reduction.
+Orchestrates ticket implementation with adaptive pipeline, script delegation, quality gates, and smart agent routing. v10.0 eliminates frontier model usage, scripts Gate 1, and routes trivial/simple tickets to Haiku for significant cost reduction.
 
 ## Architecture
 
@@ -20,7 +20,7 @@ Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Ro
 
 - **Fast Path** (trivial): Single Haiku agent, all 4 gates inline. $0.03-0.08/ticket.
 - **Fast Path** (simple): Haiku impl + Sonnet Gate 4 review. $0.10-0.20/ticket.
-- **Full Path** (complex): Team-based with Haiku implementers, Sonnet reviewers, optional Opus frontier. $1.50-3.00/ticket.
+- **Full Path** (complex): Team-based with Haiku implementers, Sonnet reviewers, Sonnet high-risk review. $0.70-1.50/ticket.
 
 ### Quality Gates
 
@@ -62,7 +62,7 @@ Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Ro
 | cheap | Haiku | Implementers, investigators, fast-path trivial |
 | balanced | Sonnet | Fast-path simple review, Gate 4 reviewers, escalation |
 
-### High-Risk Pattern Detection (replaces Opus frontier gate)
+### High-Risk Pattern Detection (replaces frontier gate)
 
 `diff_pattern_scanner.py` scans git diff with regex for: AUTH (jwt, bcrypt, session, token), DB_SCHEMA (createIndex, migration, ALTER TABLE), SERIALIZATION (JSON.parse, Buffer.from), ERROR_HANDLING (Promise.all, retry), EXTERNAL_API (fetch, axios), CONCURRENCY (worker_threads, mutex). If any detected → Gate 4 uses `high-risk-review.md` instead of `reviewer-prefix.md`. Cost: $0.
 
@@ -77,8 +77,8 @@ Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Ro
 
 - `SKILL.md` — Compressed leader prompt (288 lines)
 - `catalog/` — 7 discipline catalogs (TDD, debug, arch, security, perf, frontend, review)
-- `templates/` — 6 cache-optimized prompt templates
-- `scripts/implementer/` — 9 deterministic scripts
+- `templates/` — 7 cache-optimized prompt templates
+- `scripts/implementer/` — 11 deterministic scripts
 
 ## Cost Model
 
@@ -86,7 +86,7 @@ Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Ro
 |-------------|----------|-----------|-----------|---------|
 | trivial | fast path Haiku | $0.08-0.20 | $0.03-0.08 | ~60% |
 | simple | fast path Haiku+Sonnet | $0.20-0.40 | $0.10-0.20 | ~50% |
-| complex | full path no Opus | $1.20-2.50 | $0.70-1.50 | ~40% |
+| complex | full path Sonnet review | $1.20-2.50 | $0.70-1.50 | ~40% |
 
 Token savings: ~12,000 → ~3,500 tokens per invocation (71% reduction in prompt size).
 
