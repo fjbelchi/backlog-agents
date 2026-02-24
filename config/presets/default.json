@@ -71,8 +71,8 @@
     "confidenceThreshold": 80,
     "maxReviewRounds": 3,
     "frontierReview": {
-      "enabled": true,
-      "triggerPatterns": ["serialization", "db_schema", "auth", "error_handling", "external_api", "concurrency"],
+      "enabled": false,
+      "triggerPatterns": [],
       "skipForComplexity": ["trivial"]
     }
   },
@@ -93,7 +93,7 @@
       "entryModelDraft": "free",
       "entryModelImplement": "cheap",
       "entryModelReview": "balanced",
-      "escalationModel": "frontier",
+      "escalationModel": "balanced",
       "maxEscalationsPerTicket": 1
     },
     "tokenPolicy": {
