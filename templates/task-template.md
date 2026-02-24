@@ -10,6 +10,8 @@ blockers: []
 depends_on: []
 shared_files: []
 related_docs: []
+estimated_tokens: 0        # calculated in Phase 1, never set manually
+scope_boundary: ""         # module prefix, e.g. "src/auth/"
 ---
 
 # TASK-NNN: Title
@@ -21,6 +23,7 @@ related_docs: []
 <!-- What needs to be done with enough detail to implement -->
 
 ## Affected Files
+<!-- MAX 5 files — tickets exceeding this will be auto-split by the scope gate -->
 | File | Action | Description |
 |------|--------|-------------|
 | path/to/file | create/modify/delete | What changes |
