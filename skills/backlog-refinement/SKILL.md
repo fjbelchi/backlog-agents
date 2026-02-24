@@ -15,8 +15,10 @@ This skill runs inside a target project that has been initialized with `backlog-
 ## MODEL RULES FOR TASK TOOL
 
 ```
-model: "sonnet"  → write-agents: report generation, ticket file updates
+model: "haiku"   → write-agents: sub-ticket file creation during auto-split (receives pre-digested context map)
 model: "haiku"   → analysis agents: code verification, duplicate detection
+model: "sonnet"  → write-agents: health report generation only (complex multi-section doc)
+NOTE: split ticket write-agents use Haiku; report write-agent stays Sonnet (complexity).
 NEVER omit model: — parent may be Opus/Sonnet; always set explicitly.
 ```
 
