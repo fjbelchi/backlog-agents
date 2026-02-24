@@ -15,8 +15,9 @@ This skill runs inside a target project that has been initialized with `backlog-
 ## MODEL RULES FOR TASK TOOL
 
 ```
-model: "sonnet"  → write-agents: ticket file creation, cost section generation
+model: "haiku"   → write-agents: ticket file creation (receives pre-digested context map)
 model: "haiku"   → analysis agents: codebase scanning, gap detection, duplicate check
+NOTE: write-agent is now Haiku (not Sonnet) because parent pre-digests all context.
 NEVER omit model: — parent may be Opus/Sonnet; always set explicitly.
 ```
 
@@ -225,6 +226,37 @@ Use Glob and Grep to understand the relevant parts of the codebase:
 5. Identify imports, exports, types, and interfaces relevant to the ticket
 
 For large projects, use the **Task** tool to delegate codebase scanning to a subagent.
+
+### 1.6 Build Context Map
+
+After completing 1.1–1.5, assemble a context map. This is the **only input** the Haiku write-agent will receive — it must contain everything needed to write the ticket without tool calls.
+
+```
+<context_map>
+  affected_files:
+    - path: src/auth/login.ts
+      line_count: 142
+      relevant_snippets: |
+        // lines 1-20: imports and types
+        export interface LoginRequest { ... }
+        // lines 45-67: main handler
+        export async function login(req, res) { ... }
+    - path: src/auth/session.ts
+      line_count: 89
+      relevant_snippets: |
+        export function createSession(userId: string): Session { ... }
+  patterns:
+    naming: camelCase for functions, PascalCase for types
+    error_handling: throw AppError with status code
+    test_style: vitest, describe/it blocks, vi.mock() for dependencies
+  dependencies: []
+  scope_boundary: "src/auth/"
+  estimated_tokens: 42000
+  existing_tickets_summary: "FEAT-001 (pending): Add OAuth. TASK-003 (pending): Rate limiting."
+</context_map>
+```
+
+**Snippet extraction rule**: Max 20 lines per file. Include function signatures, exported types, and any code directly relevant to the ticket. Omit implementation bodies.
 
 ---
 
