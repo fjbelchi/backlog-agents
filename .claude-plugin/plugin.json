@@ -1,7 +1,7 @@
 {
   "name": "backlog-toolkit",
   "description": "Reusable backlog management toolkit for Claude Code. Stack-agnostic skills for ticket creation, refinement, implementation with adaptive pipeline (fast/full path), audit with cascading funnel, benchmarking, and ACE-inspired self-improvement. Script delegation for cost-optimized execution.",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "author": {
     "name": "fbelchi",
     "url": "https://github.com/fbelchi"
