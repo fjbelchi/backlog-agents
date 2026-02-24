@@ -674,6 +674,30 @@
           }
         }
       }
+    },
+    "ticketConstraints": {
+      "type": "object",
+      "description": "Constraints on ticket scope to ensure completability within context window.",
+      "additionalProperties": false,
+      "properties": {
+        "maxAffectedFiles": {
+          "type": "integer",
+          "description": "Maximum number of files a single ticket may touch.",
+          "default": 5,
+          "minimum": 1
+        },
+        "maxEstimatedTokens": {
+          "type": "integer",
+          "description": "Maximum estimated tokens for implementer context. Tickets exceeding this are auto-split.",
+          "default": 100000,
+          "minimum": 10000
+        },
+        "requireSingleResponsibility": {
+          "type": "boolean",
+          "description": "Require all affected files to share a common path prefix (single scope boundary).",
+          "default": true
+        }
+      }
     }
   }
 }
