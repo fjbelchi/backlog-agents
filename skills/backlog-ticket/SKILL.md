@@ -27,7 +27,7 @@ NEVER omit model: — parent may be Opus/Sonnet; always set explicitly.
 - Never output ticket content inline in your response
 - Max response length: ~30 lines
 - Use Write tool for files < 50 lines
-- Use sonnet write-agent (Task tool, model: "sonnet") for ticket files (always > 50 lines)
+- Use haiku write-agent (Task tool, model: "haiku") for ticket files (always > 50 lines)
 ```
 
 ## WRITE-AGENT CHUNKING RULE
@@ -599,24 +599,27 @@ PRIORITY ALIGNMENT:
 
 ### All 6 Checks Pass
 
-Spawn a sonnet write-agent to generate and write the ticket file:
+Spawn a haiku write-agent to generate and write the ticket file:
 
 ```
 Task(
   subagent_type: "general-purpose",
-  model: "sonnet",
+  model: "haiku",
   prompt: """
-You are a write-agent. Your only job is to create a ticket file using the Write tool.
-Do NOT output file content in your response.
+You are a write-agent. Your ONLY job is to create a ticket file using the Write tool.
+Do NOT use any other tools. Do NOT explore the codebase. Do NOT output file content inline.
+All context you need is provided below.
+
+{context_map}
 
 Write to: {dataDir}/pending/{PREFIX}-{NNN}-{slug}.md
 
 Template structure: [paste the full template content here]
 Section content decisions:
-  frontmatter: [all frontmatter fields and values]
+  frontmatter: [all frontmatter fields and values, including estimated_tokens and scope_boundary]
   context: [context section content]
   description: [description section content]
-  affected_files: [affected files table]
+  affected_files: [affected files table — max 5 rows]
   acceptance_criteria: [AC list]
   test_strategy: [test strategy content]
   dependencies: [dependencies list]
