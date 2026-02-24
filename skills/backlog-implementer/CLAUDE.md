@@ -1,22 +1,25 @@
-# Backlog Implementer Skill v9.0
+# Backlog Implementer Skill v10.0
 
 ## Purpose
 
-Orchestrates ticket implementation with adaptive pipeline, script delegation, 5 quality gates, and smart agent routing. v9.0 reduced SKILL.md from 1055→288 lines (73% token reduction) by replacing 7 LLM calls with deterministic scripts.
+Orchestrates ticket implementation with adaptive pipeline, script delegation, quality gates, and smart agent routing. v10.0 eliminates Opus, scripts Gate 1, and routes trivial/simple tickets to Haiku for significant cost reduction.
 
 ## Architecture
 
-### v9.0 Changes (from v8.0)
+### v10.0 Changes (from previous version)
 
-- **Script delegation**: 7 LLM calls replaced with Python/bash scripts ($0 cost, 0 tokens)
-- **Template extraction**: 4 inline prompts moved to template files (loaded on-demand)
-- **Prompt compression**: Tables replace prose, duplicates removed, "why" commentary moved here
+- **Frontier model eliminated**: Selective high-risk gate removed, replaced by `diff_pattern_scanner.py` (regex) + Sonnet `high-risk-review.md`
+- **Gate 1 scripted**: `plan_generator.py` replaces Ollama/Haiku LLM call ($0, deterministic)
+- **Gate 3 integrated**: `lint_fixer.py` integrates lint into Gate 2, passes only error lines to Haiku (70% token reduction)
+- **Fast path Haiku**: Trivial tickets use Haiku (was Sonnet); simple use Haiku+Sonnet-review
+- **3 LLM gates**: Down from 5 (was: Plan+Impl+Lint+Review+Frontier → now: Impl+Lint(conditional)+Review)
 
 ### Adaptive Pipeline
 
 Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Routes:
 
-- **Fast Path** (trivial/simple): Single Sonnet agent, all 5 gates inline. $0.10-0.50/ticket.
+- **Fast Path** (trivial): Single Haiku agent, all 4 gates inline. $0.03-0.08/ticket.
+- **Fast Path** (simple): Haiku impl + Sonnet Gate 4 review. $0.10-0.20/ticket.
 - **Full Path** (complex): Team-based with Haiku implementers, Sonnet reviewers, optional Opus frontier. $1.50-3.00/ticket.
 
 ### Quality Gates
@@ -35,6 +38,9 @@ Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Ro
 | `scripts/implementer/micro_reflect.py` | Haiku micro-reflector tagging | $0 |
 | `scripts/implementer/wave_end.py` | Phase 4+6 (150 lines) | $0 |
 | `scripts/implementer/enrich_ticket.py` | Leader inline enrichment | $0 |
+| `scripts/implementer/plan_generator.py` | Gate 1 plan generation | $0 |
+| `scripts/implementer/lint_fixer.py` | Gate 3 lint error parsing | $0 |
+| `scripts/implementer/diff_pattern_scanner.py` | High-risk pattern detection | $0 |
 
 ### Template Layer
 
@@ -46,25 +52,25 @@ Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Ro
 | `templates/wave-summary-agent.md` | Fallback if wave_end.py fails | Error fallback |
 | `templates/micro-reflector.md` | Fallback if micro_reflect.py fails | Error fallback |
 | `templates/pre-review.md` | Fallback if pre_review.py fails | Error fallback |
+| `templates/high-risk-review.md` | Sonnet 6-point high-risk checklist | When patterns detected |
 
 ### Model Routing
 
 | Tier | Model | Usage |
 |------|-------|-------|
-| free | Ollama qwen3-coder | Gate 1 PLAN text only (remaining calls now scripts) |
-| cheap | Haiku | Implementers, investigators |
-| balanced | Sonnet | Fast-path agent, Gate 4 reviewers |
-| frontier | Opus | Gate 4b selective high-risk review |
+| free | Ollama qwen3-coder | Wave plan, pre-review, commit msg (via llm_call.sh) |
+| cheap | Haiku | Implementers, investigators, fast-path trivial |
+| balanced | Sonnet | Fast-path simple review, Gate 4 reviewers, escalation |
 
-### Gate 4b Trigger Patterns
+### High-Risk Pattern Detection (replaces Opus frontier gate)
 
-Opus frontier review triggers on: SERIALIZATION (JSON.parse, Redis, Buffer), DB_SCHEMA (createIndex, migration), AUTH (jwt, session, bcrypt), ERROR_HANDLING (Promise.all, retry), EXTERNAL_API (fetch, axios), CONCURRENCY (worker_threads, mutex). Skips: tests/docs only, trivial tickets.
+`diff_pattern_scanner.py` scans git diff with regex for: AUTH (jwt, bcrypt, session, token), DB_SCHEMA (createIndex, migration, ALTER TABLE), SERIALIZATION (JSON.parse, Buffer.from), ERROR_HANDLING (Promise.all, retry), EXTERNAL_API (fetch, axios), CONCURRENCY (worker_threads, mutex). If any detected → Gate 4 uses `high-risk-review.md` instead of `reviewer-prefix.md`. Cost: $0.
 
 ### Escalation Rules
 
-- ARCH or SECURITY tag → parent model
-- qualityGateFails ≥ 2 → parent model
-- complex ticket + gateFails ≥ 1 → parent model
+- ARCH or SECURITY tag → sonnet (balanced)
+- qualityGateFails ≥ 2 → sonnet (balanced)
+- complex ticket + gateFails ≥ 1 → sonnet (balanced)
 - Fast path: 2 fails → escalate to full path
 
 ## Key Files
@@ -76,11 +82,11 @@ Opus frontier review triggers on: SERIALIZATION (JSON.parse, Redis, Buffer), DB_
 
 ## Cost Model
 
-| Ticket Type | Pipeline | v8.0 Cost | v9.0 Cost | Savings |
+| Ticket Type | Pipeline | Before Cost | After Cost | Savings |
 |-------------|----------|-----------|-----------|---------|
-| trivial | fast path | $0.10-0.25 | $0.08-0.20 | ~20% |
-| simple | fast path | $0.25-0.50 | $0.20-0.40 | ~20% |
-| complex | full path | $1.50-3.00 | $1.20-2.50 | ~20% |
+| trivial | fast path Haiku | $0.08-0.20 | $0.03-0.08 | ~60% |
+| simple | fast path Haiku+Sonnet | $0.20-0.40 | $0.10-0.20 | ~50% |
+| complex | full path no Opus | $1.20-2.50 | $0.70-1.50 | ~40% |
 
 Token savings: ~12,000 → ~3,500 tokens per invocation (71% reduction in prompt size).
 
