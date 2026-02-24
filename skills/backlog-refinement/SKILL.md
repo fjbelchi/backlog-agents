@@ -4,7 +4,7 @@ description: "Refine backlog tickets: scope audit + auto-split, verify code refe
 allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task
 ---
 
-# Backlog Refinement Skill v3.0
+# Backlog Refinement Skill v4.0
 
 Refine existing backlog tickets by verifying code references, detecting duplicates, validating completeness, updating severity, and generating a health report.
 
