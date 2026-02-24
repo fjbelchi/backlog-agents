@@ -1,10 +1,10 @@
 ---
 name: backlog-implementer
-description: "Adaptive pipeline implementer: complexity classifier → fast/full path, 5 quality gates, smart routing, configurable reviews, script delegation, cost tracking. v9.0."
+description: "Adaptive pipeline implementer: complexity classifier → fast/full path, 3 LLM gates, smart routing, configurable reviews, full script delegation, cost tracking. v10.0."
 allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, TaskUpdate, TaskGet
 ---
 
-# Backlog Implementer v9.0
+# Backlog Implementer v10.0
 
 **Role**: Leader coordinator. DOES NOT implement code directly.
 
@@ -14,11 +14,9 @@ allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete
 
 | Model | Usage | When |
 |-------|-------|------|
-| haiku | Implementers, investigators, write-agents | Default for code tasks |
-| sonnet | Fast-path single-agent, Gate 4 reviewers | Simple tickets, reviews |
-| opus | Gate 4b frontier review | High-risk patterns only |
-| free (Ollama) | Classify, wave plan, Gate 1 plan, pre-review, commit msg | Via llm_call.sh |
-| parent (omit model:) | Escalation | ARCH/SEC tag, gateFails≥2, complex+fails≥1 |
+| haiku | Implementers, investigators, fast-path trivial | Default for code tasks |
+| sonnet | Fast-path simple review, Gate 4 reviewers, escalation | Reviews, high-risk, escalation |
+| free (Ollama) | Classify, wave plan, pre-review, commit msg | Via llm_call.sh |
 
 **CALL BUDGET**: NEVER spawn one agent per finding. ALWAYS batch.
 
@@ -65,11 +63,9 @@ Read from `backlog.config.json` in Phase 0 ONLY.
 |------|---------|------------|-------|
 | Classify | free (classify.py) | heuristic fallback | $0 script |
 | Wave Plan | free (wave_plan.py) | haiku subagent | $0 script |
-| Gate 1 PLAN | free (llm_call.sh) | haiku subagent | Ollama first |
-| Gate 2 IMPL | haiku | sonnet on fail, parent on ARCH/SEC | TDD required |
-| Gate 3 LINT | haiku | — | Run tools, LLM analyzes |
-| Gate 4 REVIEW | sonnet | parent after 2nd fail | Pre-review via pre_review.py |
-| Gate 4b FRONTIER | opus | — | Selective, high-risk only |
+| Gate 1 PLAN | free (plan_generator.py) | — | $0 script, no LLM |
+| Gate 2 IMPL+LINT | haiku | sonnet on fail, sonnet on ARCH/SEC | TDD + lint_fixer.py after each wave |
+| Gate 4 REVIEW | sonnet | sonnet after 2nd fail | diff_pattern_scanner.py → high-risk-review.md if patterns |
 | Gate 5 COMMIT | free (commit_msg.py) | template fallback | $0 script |
 | Wave Summary | — (wave_end.py) | haiku write-agent | $0 script |
 | Micro-Reflect | — (micro_reflect.py) | haiku fallback | $0 script |
@@ -105,7 +101,8 @@ PHASE 0.5: (merged into startup.sh — plugin root, Ollama detect, LiteLLM)
 WHILE pending_tickets AND wavesThisSession < sessionMaxWaves:
   PHASE 1: WAVE SELECT → python3 wave_plan.py → 2-3 compatible slots
   PHASE 1.5: ROUTE PIPELINE →
-    All trivial/simple → FAST PATH (no team, single Sonnet per ticket)
+    All trivial → FAST PATH Haiku (no team, single Haiku per ticket)
+    All simple → FAST PATH Haiku+Sonnet-review (Haiku impl, Sonnet Gate 4 only)
     Mix simple+complex → fast path first, then full path
     All complex → FULL PATH (team-based)
   [FULL PATH only:]
@@ -156,12 +153,15 @@ Spawn: implementer-N (model:haiku, routed type), code-reviewer (model:sonnet), i
 
 ## QUALITY GATES
 
-### Gate 1: PLAN
+### Gate 1: PLAN (script)
 
+```bash
+PLAN=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/plan_generator.py" --ticket "$TICKET_PATH")
+```
+If script fails: implementer writes plan inline (fallback). Cost: $0.
 Set context: `source scripts/ops/context.sh && set_backlog_context "$ticket_id" "plan" ...`
 If ragAvailable: query RAG for snippets + sentinel patterns (inject warnings at top).
-Implementer reads ticket, writes plan in `## Implementation Plan`. If unclear → "needs-investigation".
-Log gate cost to usage-ledger.
+If ticket is unclear → mark "needs-investigation".
 
 ### Catalog Injection
 
@@ -177,9 +177,15 @@ Min 3 tests: happy + error + edge. Order: failing tests → minimal code → tes
 
 Track injected bullet IDs for micro-reflector. If ragAvailable: `rag_upsert_file` after each file written.
 
-### Gate 3: LINT
+### Gate 3: LINT (integrated into Gate 2)
 
-Run: typeCheckCommand (0 errors), lintCommand (0 warnings), testCommand (0 failures). Skip unconfigured. Auto-fix max 3 attempts. After 3: mark `lint-blocked`, skip to next wave.
+After each implementation wave, run via lint_fixer.py:
+```bash
+LINT_JSON=$(lintCommand 2>&1 | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/lint_fixer.py" --format eslint-json)
+TSC_JSON=$(typeCheckCommand 2>&1 | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/lint_fixer.py" --format tsc)
+```
+If `clean: true`: no LLM call needed. If errors: pass ONLY the `errors` JSON to Haiku (not full files).
+Auto-fix max 3 attempts. After 3: mark `lint-blocked`, skip to next wave.
 
 ### Gate 4: REVIEW
 
@@ -197,15 +203,15 @@ If script fails: fallback to Qwen3 via llm_call.sh with `templates/pre-review.md
 **Focus types**: spec, quality, security, history. SEC tickets auto-add security + history reviewers.
 **Consolidation**: Filter by confidenceThreshold. Critical/Important from required reviewers → re-review. Max maxReviewRounds then `review-blocked`.
 
-### Gate 4b: FRONTIER REVIEW (selective Opus)
+### Gate 4: HIGH-RISK MODE (replaces Opus Gate 4b)
 
-**Trigger** — scan diff for ANY of: SERIALIZATION (JSON.parse/stringify, Redis, Buffer, protobuf), DB_SCHEMA (Schema, createIndex, migration), AUTH (jwt, token, session, bcrypt, oauth), ERROR_HANDLING (Promise.all/allSettled, try-catch external, retry), EXTERNAL_API (HttpClient, fetch, axios), CONCURRENCY (Promise.race, worker_threads, mutex).
-
-**Skip if**: diff touches only tests/docs/config, trivial complexity, maxEscalationsPerTicket reached.
-
-Spawn ONE `Task(model:"opus", subagent_type:"code-quality")` with 6-point checklist: type safety, error propagation, production readiness, semantic correctness, resource management, backward compat. Plus own deep analysis on detected patterns.
-
-If findings: CHANGES_REQUESTED → implementer fixes → re-run Gate 4 only (NOT 4b again).
+Before spawning Gate 4 reviewers, run:
+```bash
+SCAN=$(git diff HEAD~1 | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/diff_pattern_scanner.py")
+```
+If `requires_high_risk_review: true`: reviewers load `templates/high-risk-review.md` instead of `templates/reviewer-prefix.md`.
+If `requires_high_risk_review: false`: reviewers load standard `templates/reviewer-prefix.md`.
+Cost of scan: $0. No separate Gate 4b spawn needed.
 
 ### Gate 5: COMMIT
 
@@ -222,17 +228,21 @@ Verify: `git log -1 --oneline`. Clear context: `clear_backlog_context`.
 
 Leader pre-loads: ticket content, affected files, code rules, test/lint/typecheck commands, RAG context.
 
+**Trivial tickets:**
 ```
-Task(
-  subagent_type: {routed_type},
-  model: "sonnet",
-  prompt: Read templates/fast-path-agent.md with placeholders filled
-)
+Task(subagent_type: {routed_type}, model: "haiku",
+     prompt: Read templates/fast-path-agent.md with placeholders filled)
 ```
 
-**Escalation**: If fast-path agent fails Gate 3 or Gate 4 twice → set complexity="complex", route to full path next wave, increment `stats.fastPathEscalations`.
+**Simple tickets (two-step):**
+```
+Step 1: Task(model: "haiku", prompt: fast-path-agent.md — Gates 1-3 only)
+Step 2: Task(model: "sonnet", prompt: reviewer-prefix.md — Gate 4 only, receives diff + test results)
+```
 
-Log: `{"ticket_id":"{id}","pipeline":"fast","model":"sonnet","cost_usd":X,"escalated_to_full":false}`
+**Escalation**: If fails Gate 3 or Gate 4 twice → complexity="complex", full path next wave, increment `stats.fastPathEscalations`.
+
+Log: `{"ticket_id":"{id}","pipeline":"fast","model":"haiku|haiku+sonnet","cost_usd":X,"escalated_to_full":false}`
 
 ---
 
@@ -258,7 +268,7 @@ SendMessage `shutdown_request` to each teammate. Wait for response. TeamDelete. 
 ═══ WAVE {N} COMPLETE ═══
 Tickets: {completed}/{attempted} | Tests: +{N} | Cost: ${cost}
 Pipeline: fast:{N} full:{N} | Escalations: {N}
-Models: free:{N} haiku:{N} sonnet:{N} opus:{N}
+Models: free:{N} haiku:{N} sonnet:{N}
 Remaining: {N} | Session: ${total} | Cache: {rate}%
 Waves: {current}/{max}
 ══════════════════════════
