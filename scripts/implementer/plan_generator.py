@@ -28,11 +28,13 @@ def parse_acceptance_criteria(body: str) -> list[str]:
 
 def generate_plan(files: list[dict], acs: list[str]) -> str:
     lines = ["## Implementation Plan"]
-    # Order: create → modify → delete
+    # Order: create → modify → delete → unknown
+    known = {"create", "modify", "delete"}
     ordered = (
         [f for f in files if f["action"] == "create"] +
         [f for f in files if f["action"] == "modify"] +
-        [f for f in files if f["action"] == "delete"]
+        [f for f in files if f["action"] == "delete"] +
+        [f for f in files if f["action"] not in known]
     )
     for f in ordered:
         lines.append(f"- {f['action'].capitalize()} `{f['path']}`: {f['desc']}")
