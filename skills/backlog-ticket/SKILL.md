@@ -1,6 +1,6 @@
 ---
 name: backlog-ticket
-description: "Generate high-quality backlog tickets with 6-check validation and cost estimation. Detects gaps, verifies dependencies, validates contracts, analyzes impact, ensures consistency, and estimates implementation cost per model. Learns from actual costs via cost-history feedback loop."
+description: "Generate high-quality backlog tickets with 7-check validation, scope gate (max 5 files, 100k tokens), auto-split, and Haiku write-agent. Detects gaps, verifies dependencies, validates contracts, analyzes impact, ensures consistency, and estimates implementation cost per model. Learns from actual costs via cost-history feedback loop."
 allowed-tools: Read, Write, Bash, Glob, Grep, Edit, AskUserQuestion, Task
 ---
 
@@ -461,7 +461,7 @@ Round token counts to nearest 1000. Round costs to 2 decimal places.
 
 ---
 
-## Phase 3: Validation (6 Checks)
+## Phase 3: Validation (7 Checks)
 
 Run all 6 checks against the generated ticket. Track results as PASS, WARN, or ERROR.
 
@@ -592,6 +592,28 @@ PRIORITY ALIGNMENT:
   - If BUG severity is critical but priority is not
     high/critical                                     → WARN: severity/priority mismatch
 ```
+
+### Check 7: Scope Gate
+
+Final verification that the ticket satisfies implementer constraints.
+
+```
+READ ticketConstraints from config (defaults: maxAffectedFiles=5, maxEstimatedTokens=100000)
+
+CHECK files_count <= maxAffectedFiles:
+  - Count rows in Affected Files table           → ERROR if > max
+
+CHECK estimated_tokens <= maxEstimatedTokens:
+  - Use value computed in Phase 0/1.6            → ERROR if > max
+
+CHECK scope_boundary (if requireSingleResponsibility=true):
+  - All files in Affected Files must share       → ERROR if different prefixes
+    the scope_boundary prefix
+
+IF any check fails → trigger auto-split (Phase 0.6) and regenerate
+```
+
+**Note:** Check #7 runs in Phase 3 as final verification. It should rarely trigger because Phase 0 already gated the request — this catches edge cases where analysis revealed additional files.
 
 ---
 
