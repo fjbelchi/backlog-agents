@@ -40,6 +40,78 @@ Never generate more than 50 lines of file content per tool call.
 
 ---
 
+## Phase 0: Scope Gate
+
+Run before Phase 1. Exits early if constraints are met; auto-splits if not.
+
+### 0.1 Read Constraints
+
+Read `ticketConstraints` from `backlog.config.json`. If absent, use defaults:
+
+```
+maxAffectedFiles: 5
+maxEstimatedTokens: 100000
+requireSingleResponsibility: true
+```
+
+### 0.2 Identify Candidate Files
+
+Use Glob/Grep to find files mentioned or implied by the user request — **without reading content**.
+
+```bash
+# Count lines without reading file content
+wc -l path/to/file1 path/to/file2 ...
+```
+
+### 0.3 Estimate Tokens
+
+```
+estimated_tokens = Σ(lines_per_file × 4)   # code to read
+                 + 2,000                     # ticket content
+                 + 10,000                    # implementation overhead
+```
+
+### 0.4 Detect Scope Boundary
+
+```
+scope_boundary = longest common path prefix of all candidate files
+Example: ["src/auth/login.ts", "src/auth/session.ts"] → "src/auth/"
+```
+
+### 0.5 Check Constraints
+
+```
+CHECK A: len(candidate_files) <= maxAffectedFiles
+CHECK B: estimated_tokens <= maxEstimatedTokens
+CHECK C: requireSingleResponsibility → all files share scope_boundary
+```
+
+If **all pass** → proceed to Phase 1 with `estimated_tokens` and `scope_boundary` already computed.
+
+If **any fail** → run Auto-Split (§0.6) and loop Phase 1–4 for each sub-ticket instead.
+
+### 0.6 Auto-Split
+
+When constraints are exceeded:
+
+1. **Detect split points**: module boundaries, architectural layers (frontend/backend/DB), dependency order
+2. **Generate N sub-requests**: each satisfying all constraints independently
+3. **Inherit naming**: if original request had a name prefix, sub-tickets use it: `AUTH-001`, `AUTH-002`
+4. **Order by dependency**: blocking sub-tickets first
+5. **Each sub-ticket** runs through its own Phase 0 gate before proceeding
+
+Inform the user:
+
+```
+Request exceeds scope constraints (N files, ~X tokens).
+Auto-splitting into {M} sub-tickets:
+  1. {description of sub-ticket 1} (~{files} files, ~{tokens} tokens)
+  2. {description of sub-ticket 2} ...
+Proceeding with sub-ticket 1...
+```
+
+---
+
 ## Phase 1: Analysis
 
 **Context tracking**: At start of ticket generation:
