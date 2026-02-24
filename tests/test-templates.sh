@@ -34,7 +34,7 @@ TEMPLATES=(
   "idea-template.md"
 )
 
-FRONTMATTER_FIELDS=(id title status priority depends_on shared_files)
+FRONTMATTER_FIELDS=(id title status priority depends_on shared_files estimated_tokens scope_boundary)
 
 REQUIRED_SECTIONS=(
   "Context"
