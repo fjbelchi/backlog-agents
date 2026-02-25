@@ -208,6 +208,40 @@ PRE_REVIEW=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/pre_review.py" \
 ```
 If script fails: fallback to Qwen3 via llm_call.sh with `templates/pre-review.md`.
 
+**Batch path** (default when `config.batchPolicy.reviewBatchEnabled = true`):
+
+```bash
+REVIEW_FOCUS="${REVIEW_FOCUS_TYPES:-spec,quality}"   # SEC tickets: spec,quality,security,history
+
+BATCH_REVIEW=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/batch_review.py" \
+  --diff <(git diff HEAD~1) \
+  --ticket "$TICKET_PATH" \
+  --code-rules "${CODE_RULES_PATH:-}" \
+  --focus "$REVIEW_FOCUS" \
+  --batch-state .backlog-ops/review-batch-state.json \
+  --base-url "${LITELLM_BASE_URL:-https://api.anthropic.com}" \
+  --api-key-env "${API_KEY_ENV:-ANTHROPIC_API_KEY}")
+BATCH_EXIT=$?
+```
+
+If `BATCH_EXIT == 0`:
+```bash
+REVIEW_RESULT=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/batch_review_poll.py" \
+  --batch-id "$(echo $BATCH_REVIEW | python3 -c 'import json,sys; print(json.load(sys.stdin)["batch_id"])')" \
+  --ticket-id "$TICKET_ID" \
+  --timeout "${reviewBatchTimeoutSec:-300}" \
+  --interval "${reviewBatchIntervalSec:-30}")
+POLL_EXIT=$?
+```
+
+- `POLL_EXIT == 0` → parse `REVIEW_RESULT` JSON → proceed to consolidation
+- `POLL_EXIT == 1` (timeout) → **FALLBACK**
+- `BATCH_EXIT != 0` → **FALLBACK**
+
+**FALLBACK**: spawn Task reviewers as in v10.0 (live agents, current behavior).
+
+**Consolidation** (unchanged): filter by `confidenceThreshold`, Critical/Important → re-review, max `maxReviewRounds` then `review-blocked`.
+
 **Reviewers**: Spawn from `config.reviewPipeline.reviewers` (default 2). Each uses `templates/reviewer-prefix.md` (static, cached) + dynamic suffix (code rules, diff, ticket ACs, focus assignment).
 
 **Conversation pruning**: Reviewer receives ONLY git diff + test results + ACs + pre-review checklist. NOT the full planning/implementation conversation.

@@ -41,6 +41,8 @@ Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Ro
 | `scripts/implementer/plan_generator.py` | Gate 1 plan generation | $0 |
 | `scripts/implementer/lint_fixer.py` | Gate 3 lint error parsing | $0 |
 | `scripts/implementer/diff_pattern_scanner.py` | High-risk pattern detection | $0 |
+| `scripts/implementer/batch_review.py`      | Submits Gate 4 reviews via Batch API | $0 (Batch at 50%) |
+| `scripts/implementer/batch_review_poll.py` | Polls batch results + consolidates   | $0 script        |
 
 ### Template Layer
 
@@ -85,7 +87,7 @@ Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Ro
 |-------------|----------|-----------|-----------|---------|
 | trivial | fast path Sonnet | $0.08-0.20 | $0.15-0.35 | quality over cost |
 | simple | fast path Sonnet+Sonnet | $0.20-0.40 | $0.30-0.60 | quality over cost |
-| complex | full path Sonnet | $1.20-2.50 | $1.20-2.50 | same |
+| complex | full path Sonnet + Batch Gate 4 | $1.20-2.50 | $0.78-1.63 | ~35% savings vs v10.0 |
 
 Token savings: ~12,000 → ~3,500 tokens per invocation (71% reduction in prompt size).
 

@@ -523,6 +523,23 @@
                 "maxRetries": { "type": "integer", "minimum": 0, "default": 3 },
                 "backoffMultiplier": { "type": "number", "minimum": 1, "default": 2.0 }
               }
+            },
+            "reviewBatchEnabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Submit Gate 4 reviews via Batch API (50% cost reduction). Automatically falls back to live agents on timeout or API error."
+            },
+            "reviewBatchTimeoutSec": {
+              "type": "integer",
+              "minimum": 30,
+              "default": 300,
+              "description": "Max seconds to wait for batch review results before falling back to live agents."
+            },
+            "reviewBatchIntervalSec": {
+              "type": "integer",
+              "minimum": 5,
+              "default": 30,
+              "description": "Polling interval in seconds when waiting for batch review results."
             }
           }
         },

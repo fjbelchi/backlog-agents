@@ -137,7 +137,10 @@
       "retryPolicy": {
         "maxRetries": 3,
         "backoffMultiplier": 2.0
-      }
+      },
+      "reviewBatchEnabled": true,
+      "reviewBatchTimeoutSec": 300,
+      "reviewBatchIntervalSec": 30
     },
     "ragPolicy": {
       "enabled": true,
