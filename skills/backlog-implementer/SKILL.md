@@ -171,9 +171,21 @@ Always: CAT-TDD + CAT-PERF. Per type: BUG→CAT-DEBUG, FEAT→CAT-ARCH, SEC→CA
 
 Min 3 tests: happy + error + edge. Order: failing tests → minimal code → tests pass.
 
-**Prompt construction** (cache-optimized):
-1. STATIC PREFIX: `templates/implementer-prefix.md` (cached ~90% hit after first call)
-2. DYNAMIC SUFFIX (in order): CODE RULES → PLAYBOOK BULLETS (via `select_relevant()`, top-10, between rules and catalogs) → CATALOG DISCIPLINES → RAG CONTEXT → TICKET CONTENT → GATE INSTRUCTIONS
+**Prompt cache boundary** — construct prompt in this exact order:
+
+| # | Content | Cache? |
+|---|---------|--------|
+| 1 | `templates/implementer-prefix.md` (Iron Laws, TDD, context rules) | ✅ CACHED |
+| 2 | CODE RULES (from `config.codeRules.source`) | ✅ CACHED |
+| — | ← cache_control breakpoint (LiteLLM auto / direct explicit) | |
+| 3 | PLAYBOOK BULLETS (top-10 via `select_relevant()`) | dynamic |
+| 4 | CATALOG DISCIPLINES (CAT-TDD, CAT-PERF, etc.) | dynamic |
+| 5 | RAG CONTEXT (if available) | dynamic |
+| 6 | TICKET CONTENT | dynamic |
+| 7 | GATE INSTRUCTIONS | dynamic |
+
+**Rule**: NEVER place dynamic content before or between items 1-2.
+Static blocks must be contiguous at the top of the prompt string.
 
 Track injected bullet IDs for micro-reflector. If ragAvailable: `rag_upsert_file` after each file written.
 
