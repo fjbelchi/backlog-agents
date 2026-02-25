@@ -38,6 +38,7 @@ DEFAULT_API_KEY = "sk-litellm-changeme"
 DEFAULT_STATE_PATH = Path(".backlog-ops/batch-state.json")
 BATCH_MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 8192
+ANTHROPIC_BETA_HEADER = "prompt-caching-2024-07-31"
 
 MODEL_ALIASES: dict[str, str] = {
     "cheap": "claude-sonnet-4-6",
@@ -158,11 +159,27 @@ def build_batch_requests(tickets: list[dict]) -> list[dict]:
             "params": {
                 "model": BATCH_MODEL,
                 "max_tokens": MAX_TOKENS,
-                "system": PLAN_SYSTEM_PROMPT,
+                "system": [
+                    {
+                        "type": "text",
+                        "text": PLAN_SYSTEM_PROMPT,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
                 "messages": [
                     {
                         "role": "user",
-                        "content": f"Create an implementation plan for this ticket:\n\n{content}",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "",
+                                "cache_control": {"type": "ephemeral"},
+                            },
+                            {
+                                "type": "text",
+                                "text": f"Ticket:\n\n{content}",
+                            },
+                        ],
                     }
                 ],
             },
@@ -276,6 +293,7 @@ def main(state_path: Path | None = None) -> int:
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "anthropic-beta": ANTHROPIC_BETA_HEADER,
     }
     payload = {"requests": batch_requests}
 

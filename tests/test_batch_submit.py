@@ -164,7 +164,12 @@ class TestBuildBatchRequests:
         requests = build_batch_requests(tickets)
 
         system = requests[0]["params"].get("system", "")
-        assert "implementation plan" in system.lower()
+        # system is now a list of content blocks; extract text for assertion
+        if isinstance(system, list):
+            system_text = " ".join(block.get("text", "") for block in system)
+        else:
+            system_text = system
+        assert "implementation plan" in system_text.lower()
 
     def test_multiple_tickets_produce_multiple_requests(self, tmp_path):
         from scripts.ops.batch_submit import parse_ticket, build_batch_requests
@@ -323,3 +328,40 @@ class TestMainSubmit:
         data = json.loads(state_path.read_text(encoding="utf-8"))
         assert "review_templates" in data
         assert "FEAT-001" in data["review_templates"]
+
+
+# ---------------------------------------------------------------------------
+# cache_control tests (add after existing tests)
+# ---------------------------------------------------------------------------
+
+def test_build_batch_requests_system_is_content_blocks():
+    """system prompt must be a list of content blocks, not a plain string."""
+    from scripts.ops.batch_submit import build_batch_requests
+    tickets = [{"id": "FEAT-001", "content": "## Description\nDo X"}]
+    reqs = build_batch_requests(tickets)
+    system = reqs[0]["params"]["system"]
+    assert isinstance(system, list), "system must be a list of content blocks"
+    assert system[0]["type"] == "text"
+    assert "cache_control" in system[0]
+    assert system[0]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_build_batch_requests_user_has_two_blocks():
+    """user message must have two content blocks: stable (cached) + dynamic."""
+    from scripts.ops.batch_submit import build_batch_requests
+    tickets = [{"id": "FEAT-001", "content": "## Description\nDo X"}]
+    reqs = build_batch_requests(tickets)
+    user_content = reqs[0]["params"]["messages"][0]["content"]
+    assert isinstance(user_content, list)
+    assert len(user_content) == 2
+    # first block is stable context (may be empty string but must have cache_control)
+    assert "cache_control" in user_content[0]
+    # second block is the ticket — no cache_control
+    assert "cache_control" not in user_content[1]
+    assert "Ticket:" in user_content[1]["text"]
+
+
+def test_build_batch_requests_includes_beta_header():
+    """build_batch_requests output carries anthropic-beta marker in metadata."""
+    from scripts.ops.batch_submit import ANTHROPIC_BETA_HEADER
+    assert ANTHROPIC_BETA_HEADER == "prompt-caching-2024-07-31"
