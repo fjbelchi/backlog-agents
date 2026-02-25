@@ -1,10 +1,10 @@
 ---
 name: backlog-implementer
-description: "Adaptive pipeline implementer: complexity classifier → fast/full path, 3 LLM gates, smart routing, configurable reviews, full script delegation, cost tracking. v10.0."
+description: "Adaptive pipeline implementer: complexity classifier → fast/full path, 3 LLM gates, smart routing, configurable reviews, full script delegation, cost tracking. v11.0."
 allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, TaskUpdate, TaskGet
 ---
 
-# Backlog Implementer v10.0
+# Backlog Implementer v11.0
 
 **Role**: Leader coordinator. DOES NOT implement code directly.
 

@@ -106,6 +106,9 @@ def poll_and_consolidate(
             reviews = [_parse_result(json.loads(line)) for line in rresp.iter_lines() if line]
             return consolidate_results(ticket_id, batch_id, reviews)
 
+        if data.get("processing_status") == "errored":
+            raise RuntimeError(f"Batch {batch_id} failed with status 'errored'")
+
         time.sleep(interval)
         elapsed += interval
 

@@ -111,3 +111,26 @@ def test_consolidated_verdict_approved_if_all_approved():
     ]
     result = consolidate_results("FEAT-001", "msgbatch_test", reviews)
     assert result["consolidated_verdict"] == "APPROVED"
+
+
+def test_poll_errored_raises_immediately():
+    """When batch status is 'errored', raises RuntimeError immediately (no timeout wait)."""
+    from scripts.implementer.batch_review_poll import poll_and_consolidate
+
+    errored_resp = MagicMock()
+    errored_resp.status_code = 200
+    errored_resp.json.return_value = {"processing_status": "errored", "id": "msgbatch_test"}
+
+    with patch("requests.get", return_value=errored_resp), \
+         patch("time.sleep") as mock_sleep:
+        with pytest.raises(RuntimeError, match="errored"):
+            poll_and_consolidate(
+                batch_id="msgbatch_test",
+                ticket_id="FEAT-001",
+                base_url="https://api.anthropic.com",
+                api_key="sk-test",
+                timeout=300,
+                interval=30,
+            )
+        # Must NOT have slept — should exit immediately
+        mock_sleep.assert_not_called()

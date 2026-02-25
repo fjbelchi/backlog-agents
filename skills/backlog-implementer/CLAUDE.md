@@ -1,12 +1,12 @@
-# Backlog Implementer Skill v10.0
+# Backlog Implementer Skill v11.0
 
 ## Purpose
 
-Orchestrates ticket implementation with adaptive pipeline, script delegation, quality gates, and smart agent routing. v10.0 eliminates frontier model usage, scripts Gate 1, and uses Sonnet for all code tasks to maximize quality.
+Orchestrates ticket implementation with adaptive pipeline, script delegation, quality gates, and smart agent routing. v11.0 eliminates frontier model usage, scripts Gate 1, and uses Sonnet for all code tasks to maximize quality.
 
 ## Architecture
 
-### v10.0 Changes (from previous version)
+### v11.0 Changes (from previous version)
 
 - **Frontier model eliminated**: Selective high-risk gate removed, replaced by `diff_pattern_scanner.py` (regex) + Sonnet `high-risk-review.md`
 - **Gate 1 scripted**: `plan_generator.py` replaces LLM call ($0, deterministic)
