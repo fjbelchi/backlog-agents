@@ -123,7 +123,8 @@ STARTUP_JSON=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/startup.sh")
 Parse: `config`, `tickets` (with computed_complexity), `ollama_available`, `playbook_stats`, `cache_health`, `state_exists`.
 If error field present: exit with message.
 If cache_health.warning: log `"⚠ Cache hit rate below threshold"`.
-Show startup banner with ticket count, model routing summary, playbook stats.
+Show startup banner with ticket count, model routing summary, playbook stats, cache mode.
+Banner format: "Cache: {cache_mode} | Hit target: {warnBelowHitRate*100}%"
 
 ---
 

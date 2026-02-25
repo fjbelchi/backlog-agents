@@ -95,6 +95,17 @@ export LITELLM_MASTER_KEY="${LITELLM_MASTER_KEY:-sk-litellm-changeme}"
 log "litellm_url=$LITELLM_BASE_URL"
 
 # -----------------------------------------------------------
+# Step C.5: Detect cache mode (litellm vs direct)
+# -----------------------------------------------------------
+CACHE_MODE="direct"
+if curl -sf --max-time 3 "${LITELLM_BASE_URL}/health" > /dev/null 2>&1; then
+    CACHE_MODE="litellm"
+    log "cache_mode=litellm (proxy reachable)"
+else
+    log "cache_mode=direct (proxy unreachable, using explicit cache_control)"
+fi
+
+# -----------------------------------------------------------
 # Step D: Test Ollama via llm_call.sh
 # -----------------------------------------------------------
 OLLAMA_AVAILABLE="false"
@@ -275,6 +286,7 @@ ticket_count = int(sys.argv[6])
 playbook_stats = json.loads(sys.argv[7]) if sys.argv[7] != "null" else None
 cache_health = json.loads(sys.argv[8]) if sys.argv[8] != "null" else None
 state_exists = sys.argv[9] == "true"
+cache_mode = sys.argv[10]
 
 output = {
     "plugin_root": plugin_root,
@@ -286,6 +298,7 @@ output = {
     "playbook_stats": playbook_stats,
     "cache_health": cache_health,
     "state_exists": state_exists,
+    "cache_mode": cache_mode,
 }
 print(json.dumps(output, indent=2))
 ' \
@@ -297,4 +310,5 @@ print(json.dumps(output, indent=2))
     "$TICKET_COUNT" \
     "$PLAYBOOK_STATS" \
     "$CACHE_HEALTH" \
-    "$STATE_EXISTS"
+    "$STATE_EXISTS" \
+    "$CACHE_MODE"

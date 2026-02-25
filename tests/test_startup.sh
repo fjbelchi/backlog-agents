@@ -254,6 +254,45 @@ fi
 rm -rf "$TMPDIR5"
 
 # -------------------------------------------------------
+# Test 6: cache_mode field present in startup JSON
+# -------------------------------------------------------
+echo "Test 6: cache_mode field present in startup JSON"
+TMPDIR6="$(setup_tmpdir)"
+write_config "$TMPDIR6"
+MOCK_BIN6="$TMPDIR6/mock_bin"
+mkdir -p "$MOCK_BIN6"
+cat > "$MOCK_BIN6/llm_call.sh" <<'MOCK'
+#!/usr/bin/env bash
+exit 1
+MOCK
+chmod +x "$MOCK_BIN6/llm_call.sh"
+
+OUTPUT6=""
+OUTPUT6=$(cd "$TMPDIR6" && \
+    CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+    PATH="$MOCK_BIN6:$PATH" \
+    bash "$STARTUP" 2>/dev/null) || true
+
+if echo "$OUTPUT6" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert 'cache_mode' in d, 'missing cache_mode'" 2>/dev/null; then
+    pass "cache_mode present in startup JSON"
+else
+    fail "cache_mode field" "cache_mode missing from startup JSON"
+fi
+
+# Test 7: cache_mode value is 'litellm' or 'direct'
+echo "Test 7: cache_mode value is 'litellm' or 'direct'"
+if echo "$OUTPUT6" | python3 -c "
+import json,sys
+d=json.loads(sys.stdin.read())
+assert d.get('cache_mode') in ('litellm','direct'), f\"unexpected: {d.get('cache_mode')}\"
+" 2>/dev/null; then
+    pass "cache_mode has valid value ('litellm' or 'direct')"
+else
+    fail "cache_mode value" "cache_mode has unexpected value (not 'litellm' or 'direct')"
+fi
+rm -rf "$TMPDIR6"
+
+# -------------------------------------------------------
 # Summary
 # -------------------------------------------------------
 echo ""
