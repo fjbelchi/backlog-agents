@@ -105,7 +105,7 @@ def enrich_ticket(
     review_rounds: int = 1,
     tests_added: int = 0,
     cost_usd: float = 0.0,
-    model: str = "haiku",
+    model: str = "sonnet",
 ) -> dict:
     """Enrich a completed ticket with implementation metadata.
 
@@ -180,7 +180,7 @@ def main() -> int:
     ap.add_argument("--reviews", type=int, default=1, help="Number of review rounds")
     ap.add_argument("--tests", type=int, default=0, help="Number of tests added")
     ap.add_argument("--cost", type=float, default=0.0, help="Cost in USD")
-    ap.add_argument("--model", default="haiku", help="Primary model used")
+    ap.add_argument("--model", default="sonnet", help="Primary model used")
     a = ap.parse_args()
 
     try:

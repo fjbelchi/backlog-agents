@@ -2,25 +2,25 @@
 
 ## Purpose
 
-Orchestrates ticket implementation with adaptive pipeline, script delegation, quality gates, and smart agent routing. v10.0 eliminates frontier model usage, scripts Gate 1, and routes trivial/simple tickets to Haiku for significant cost reduction.
+Orchestrates ticket implementation with adaptive pipeline, script delegation, quality gates, and smart agent routing. v10.0 eliminates frontier model usage, scripts Gate 1, and uses Sonnet for all code tasks to maximize quality.
 
 ## Architecture
 
 ### v10.0 Changes (from previous version)
 
 - **Frontier model eliminated**: Selective high-risk gate removed, replaced by `diff_pattern_scanner.py` (regex) + Sonnet `high-risk-review.md`
-- **Gate 1 scripted**: `plan_generator.py` replaces Ollama/Haiku LLM call ($0, deterministic)
-- **Gate 3 integrated**: `lint_fixer.py` integrates lint into Gate 2, passes only error lines to Haiku (70% token reduction)
-- **Fast path Haiku**: Trivial tickets use Haiku (was Sonnet); simple use Haiku+Sonnet-review
+- **Gate 1 scripted**: `plan_generator.py` replaces LLM call ($0, deterministic)
+- **Gate 3 integrated**: `lint_fixer.py` integrates lint into Gate 2, passes only error lines to Sonnet (70% token reduction)
+- **Fast path Sonnet**: All tickets use Sonnet for implementation; trivial all-in-one, simple uses Sonnet impl + Sonnet review
 - **3 LLM gates**: Down from 5 (was: Plan+Impl+Lint+Review+Frontier → now: Impl+Lint(conditional)+Review)
 
 ### Adaptive Pipeline
 
 Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Routes:
 
-- **Fast Path** (trivial): Single Haiku agent, all 4 gates inline. $0.03-0.08/ticket.
-- **Fast Path** (simple): Haiku impl + Sonnet Gate 4 review. $0.10-0.20/ticket.
-- **Full Path** (complex): Team-based with Haiku implementers, Sonnet reviewers, Sonnet high-risk review. $0.70-1.50/ticket.
+- **Fast Path** (trivial): Single Sonnet agent, all 4 gates inline. $0.15-0.35/ticket.
+- **Fast Path** (simple): Sonnet impl + Sonnet Gate 4 review. $0.30-0.60/ticket.
+- **Full Path** (complex): Team-based with Sonnet implementers, Sonnet reviewers, Sonnet high-risk review. $1.20-2.50/ticket.
 
 ### Quality Gates
 
@@ -32,10 +32,10 @@ Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Ro
 |--------|----------|------|
 | `scripts/implementer/startup.sh` | Phase 0+0.5 (114 lines bash) | $0 |
 | `scripts/implementer/classify.py` | Qwen3 complexity classifier | $0 |
-| `scripts/implementer/wave_plan.py` | Qwen3/Haiku wave planning | $0 |
+| `scripts/implementer/wave_plan.py` | Qwen3 wave planning | $0 |
 | `scripts/implementer/commit_msg.py` | Qwen3 commit message gen | $0 |
 | `scripts/implementer/pre_review.py` | Qwen3 pre-review checklist | $0 |
-| `scripts/implementer/micro_reflect.py` | Haiku micro-reflector tagging | $0 |
+| `scripts/implementer/micro_reflect.py` | Micro-reflector tagging | $0 |
 | `scripts/implementer/wave_end.py` | Phase 4+6 (150 lines) | $0 |
 | `scripts/implementer/enrich_ticket.py` | Leader inline enrichment | $0 |
 | `scripts/implementer/plan_generator.py` | Gate 1 plan generation | $0 |
@@ -59,8 +59,7 @@ Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Ro
 | Tier | Model | Usage |
 |------|-------|-------|
 | free | Ollama qwen3-coder | Wave plan, pre-review, commit msg (via llm_call.sh) |
-| cheap | Haiku | Implementers, investigators, fast-path trivial |
-| balanced | Sonnet | Fast-path simple review, Gate 4 reviewers, escalation |
+| balanced | Sonnet | Implementers, investigators, fast-path, Gate 4 reviewers |
 
 ### High-Risk Pattern Detection (replaces frontier gate)
 
@@ -84,9 +83,9 @@ Tickets classified by `classify.py` (deterministic heuristic, was Qwen3 LLM). Ro
 
 | Ticket Type | Pipeline | Before Cost | After Cost | Savings |
 |-------------|----------|-----------|-----------|---------|
-| trivial | fast path Haiku | $0.08-0.20 | $0.03-0.08 | ~60% |
-| simple | fast path Haiku+Sonnet | $0.20-0.40 | $0.10-0.20 | ~50% |
-| complex | full path Sonnet review | $1.20-2.50 | $0.70-1.50 | ~40% |
+| trivial | fast path Sonnet | $0.08-0.20 | $0.15-0.35 | quality over cost |
+| simple | fast path Sonnet+Sonnet | $0.20-0.40 | $0.30-0.60 | quality over cost |
+| complex | full path Sonnet | $1.20-2.50 | $1.20-2.50 | same |
 
 Token savings: ~12,000 → ~3,500 tokens per invocation (71% reduction in prompt size).
 

@@ -15,7 +15,7 @@ Map stable aliases to current provider model IDs without hardcoding model names 
   "version": "1.0",
   "generated_at": "2026-02-18T00:00:00Z",
   "aliases": {
-    "cheap": [{"provider": "anthropic", "model": "claude-haiku-4-5"}],
+    "cheap": [{"provider": "anthropic", "model": "claude-sonnet-4-6"}],
     "balanced": [{"provider": "anthropic", "model": "claude-sonnet-4-6"}],
     "frontier": [{"provider": "openai", "model": "gpt-5.2"}],
     "code_frontier": [{"provider": "openai", "model": "gpt-5-codex"}]

@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Backlog management toolkit for Claude Code — ticket creation, refinement, implementation with adaptive pipeline, audit, benchmark, and ACE-inspired self-improvement.",
-    "version": "3.1.0"
+    "version": "3.2.0"
   },
   "plugins": [
     {
@@ -14,10 +14,10 @@
       "source": {
         "source": "url",
         "url": "https://github.com/fjbelchi/backlog-agents.git",
-        "ref": "v3.1.0"
+        "ref": "v3.2.0"
       },
-      "description": "Stack-agnostic backlog management: init, ticket, refinement, implementer (v10.0), sentinel, audit (v2.0), benchmark, reflect. Script delegation, Agent Teams, 3-gate pipeline, Opus eliminated.",
-      "version": "3.1.0"
+      "description": "Stack-agnostic backlog management: init, ticket, refinement, implementer (v10.0), sentinel, audit (v2.0), benchmark, reflect. Script delegation, Agent Teams, 3-gate pipeline, Sonnet for all code tasks.",
+      "version": "3.2.0"
     }
   ]
 }

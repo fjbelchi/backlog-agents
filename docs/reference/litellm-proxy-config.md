@@ -10,10 +10,10 @@ This decouples workflows from provider model changes.
 
 ```yaml
 model_list:
-  # CHEAP — 70% of calls: classify, triage, review, lint, drafts
+  # CHEAP — same as balanced: all tasks use Sonnet
   - model_name: cheap
     litellm_params:
-      model: anthropic/claude-haiku-4-5
+      model: anthropic/claude-sonnet-4-6
       api_key: os.environ/ANTHROPIC_API_KEY
 
   # BALANCED — 25% of calls: implementation, code generation

@@ -12,7 +12,7 @@ allowed-tools: Read, Glob, Grep, Bash, Write, Task
 ## MODEL RULES FOR TASK TOOL
 
 ```
-model: "haiku"   → Report generation, checklist evaluation, formatting
+model: "sonnet"  → Report generation, checklist evaluation, formatting
 model: "sonnet"  → Quality comparison evaluator (1 call per benchmark)
 model: "opus"    → Baseline reference implementation (1 agent per `run`)
 
@@ -48,12 +48,12 @@ SNAPSHOT=$(bash "$SCRIPT" snapshot)
 
 ### Phase 2: Generate Report
 
-Spawn Haiku write-agent to format the report:
+Spawn Sonnet write-agent to format the report:
 
 ```
 Task(
   subagent_type: "general-purpose",
-  model: "haiku",
+  model: "sonnet",
   prompt: """
 Write a cost dashboard report to .backlog-ops/cost-report-{YYYY-MM-DD}.md
 
@@ -107,7 +107,7 @@ Print summary banner after report is written.
    bash "${CLAUDE_PLUGIN_ROOT}/scripts/ops/benchmark_capture.sh" \
      breakdown {start_row_count} > .backlog-ops/benchmarks/{name}/breakdown.json
    ```
-6. Generate report via Haiku write-agent with delta data
+6. Generate report via Sonnet write-agent with delta data
 7. Write to `.backlog-ops/benchmarks/{name}/report.md`
 8. Print summary banner with cost, requests, model mix
 
@@ -209,12 +209,12 @@ Combine cost data + quality scores into final report:
 2. Read both reports:
    - `.backlog-ops/benchmarks/{run-a}/report.md`
    - `.backlog-ops/benchmarks/{run-b}/report.md`
-3. Spawn Haiku to generate comparison:
+3. Spawn Sonnet to generate comparison:
 
 ```
 Task(
   subagent_type: "general-purpose",
-  model: "haiku",
+  model: "sonnet",
   prompt: """
 Generate a side-by-side comparison of two benchmark runs.
 
@@ -237,7 +237,7 @@ Write comparison to .backlog-ops/benchmarks/compare-{a}-vs-{b}.md with:
 
 ## Constraints
 
-**DO**: Query Postgres via benchmark_capture.sh, save all data to .backlog-ops/benchmarks/, use Opus only for baseline, Sonnet only for quality eval, Haiku for everything else.
+**DO**: Query Postgres via benchmark_capture.sh, save all data to .backlog-ops/benchmarks/, use Opus only for baseline, Sonnet only for quality eval, Sonnet for everything else.
 **DO NOT**: Implement code directly, modify the project under test, run benchmarks without capturing start snapshot, skip the Opus baseline in RUN mode.
 
 ## Start

@@ -24,7 +24,7 @@ cat > "$OUT" <<JSON
   "version": "1.0",
   "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "aliases": {
-    "cheap": [{"provider": "anthropic", "model": "claude-haiku-4-5"}],
+    "cheap": [{"provider": "anthropic", "model": "claude-sonnet-4-6"}],
     "balanced": [{"provider": "anthropic", "model": "claude-sonnet-4-6"}],
     "frontier": [{"provider": "anthropic", "model": "claude-opus-4-6"}],
     "code_frontier": [{"provider": "anthropic", "model": "claude-sonnet-4-6"}]

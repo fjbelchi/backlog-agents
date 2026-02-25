@@ -13,7 +13,7 @@ allowed-tools: Read, Glob, Grep, Bash, Write, Task
 
 ```
 model: "sonnet"  → Deep analysis agent (1 call)
-model: "haiku"   → Report writer (1 call), delta applicator (1 call)
+model: "sonnet"  → Report writer (1 call), delta applicator (1 call)
 
 BUDGET: Max 3 LLM calls per reflection.
 ```
@@ -140,12 +140,12 @@ if pruned: print(f'Auto-pruned {len(pruned)} harmful bullets: {pruned}')
 
 ## Phase 4: Generate Report
 
-Spawn Haiku write-agent:
+Spawn Sonnet write-agent:
 
 ```
 Task(
   subagent_type: "general-purpose",
-  model: "haiku",
+  model: "sonnet",
   prompt: """
 Write a reflection report to .backlog-ops/reflections/reflect-{YYYY-MM-DD}.md
 

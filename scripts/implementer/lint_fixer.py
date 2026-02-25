@@ -2,7 +2,7 @@
 """
 lint_fixer.py — Smart lint error parser.
 Reads lint output from stdin, returns structured JSON with only error lines + context.
-Cost: $0. Reduces Gate 3 Haiku tokens by ~70%.
+Cost: $0. Reduces Gate 3 tokens by ~70%.
 
 Usage:
   lintCommand 2>&1 | python3 lint_fixer.py --format eslint-json

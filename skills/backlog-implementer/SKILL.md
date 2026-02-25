@@ -14,16 +14,15 @@ allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Task, TeamCreate, TeamDelete
 
 | Model | Usage | When |
 |-------|-------|------|
-| haiku | Implementers, investigators, fast-path trivial | Default for code tasks |
-| sonnet | Fast-path simple review, Gate 4 reviewers, escalation | Reviews, high-risk, escalation |
+| sonnet | Implementers, investigators, fast-path | Default for all code tasks |
 | free (Ollama) | Classify, wave plan, pre-review, commit msg | Via llm_call.sh |
 
 **CALL BUDGET**: NEVER spawn one agent per finding. ALWAYS batch.
 
 ### Output Discipline
 - Never output wave analysis or ticket content inline. Max ~30 lines.
-- Wave planning → `wave_plan.py`, fallback: haiku subagent
-- Wave summary → `wave_end.py`, fallback: haiku write-agent
+- Wave planning → `wave_plan.py`, fallback: sonnet subagent
+- Wave summary → `wave_end.py`, fallback: sonnet write-agent
 
 ### Write-Agent Chunking
 1. Write tool → first chunk (~40-50 lines, creates file)
@@ -62,13 +61,13 @@ Read from `backlog.config.json` in Phase 0 ONLY.
 | Gate | Default | Escalation | Notes |
 |------|---------|------------|-------|
 | Classify | free (classify.py) | heuristic fallback | $0 script |
-| Wave Plan | free (wave_plan.py) | haiku subagent | $0 script |
+| Wave Plan | free (wave_plan.py) | sonnet subagent | $0 script |
 | Gate 1 PLAN | free (plan_generator.py) | — | $0 script, no LLM |
-| Gate 2 IMPL+LINT | haiku | sonnet on fail, sonnet on ARCH/SEC | TDD + lint_fixer.py after each wave |
+| Gate 2 IMPL+LINT | sonnet | sonnet on ARCH/SEC (same model) | TDD + lint_fixer.py after each wave |
 | Gate 4 REVIEW | sonnet | sonnet after 2nd fail | diff_pattern_scanner.py → high-risk-review.md if patterns |
 | Gate 5 COMMIT | free (commit_msg.py) | template fallback | $0 script |
-| Wave Summary | — (wave_end.py) | haiku write-agent | $0 script |
-| Micro-Reflect | — (micro_reflect.py) | haiku fallback | $0 script |
+| Wave Summary | — (wave_end.py) | sonnet write-agent | $0 script |
+| Micro-Reflect | — (micro_reflect.py) | sonnet fallback | $0 script |
 
 **Batch mode**: If tickets ≥ `forceBatchWhenQueueOver` and no `--now`: `python3 batch_submit.py`, exit.
 
@@ -83,9 +82,9 @@ Read from `backlog.config.json` in Phase 0 ONLY.
 | Role | Agent Type | Model |
 |------|-----------|-------|
 | Leader (you) | — | — |
-| implementer-N | Routed from file extensions | haiku (default) |
+| implementer-N | Routed from file extensions | sonnet (default) |
 | code-reviewer | code-quality | sonnet |
-| investigator | general-purpose | haiku |
+| investigator | general-purpose | sonnet |
 
 **Routing**: .tsx/.jsx/.css→frontend, .py/.go/.rs→backend, Dockerfile/.tf→devops, .ipynb→ml-engineer, default→general-purpose. Majority vote if mixed. Override via `agentRouting.rules`.
 
@@ -101,8 +100,8 @@ PHASE 0.5: (merged into startup.sh — plugin root, Ollama detect, LiteLLM)
 WHILE pending_tickets AND wavesThisSession < sessionMaxWaves:
   PHASE 1: WAVE SELECT → python3 wave_plan.py → 2-3 compatible slots
   PHASE 1.5: ROUTE PIPELINE →
-    All trivial → FAST PATH Haiku (no team, single Haiku per ticket)
-    All simple → FAST PATH Haiku+Sonnet-review (Haiku impl, Sonnet Gate 4 only)
+    All trivial → FAST PATH Sonnet (no team, single Sonnet per ticket)
+    All simple → FAST PATH Sonnet+Sonnet-review (Sonnet impl, Sonnet Gate 4 only)
     Mix simple+complex → fast path first, then full path
     All complex → FULL PATH (team-based)
   [FULL PATH only:]
@@ -134,7 +133,7 @@ Show startup banner with ticket count, model routing summary, playbook stats.
 WAVE_JSON=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/wave_plan.py" --tickets "$TICKETS_JSON")
 ```
 
-If invalid JSON or script fails: fallback to Task(model:"haiku") with wave planning prompt.
+If invalid JSON or script fails: fallback to Task(model:"sonnet") with wave planning prompt.
 Parse `waves[]` and `skipped[]`. Each ticket has `id`, `subagent_type`, `rationale`.
 
 ---
@@ -143,7 +142,7 @@ Parse `waves[]` and `skipped[]`. Each ticket has `id`, `subagent_type`, `rationa
 
 ```
 TeamCreate("impl-{YYYYMMDD-HHmm}")
-Spawn: implementer-N (model:haiku, routed type), code-reviewer (model:sonnet), investigator (model:haiku)
+Spawn: implementer-N (model:sonnet, routed type), code-reviewer (model:sonnet), investigator (model:sonnet)
 ```
 
 **Context pre-loading**: Leader reads ALL affected files before spawning. Pass content in prompt (eliminates 30-40 redundant reads).
@@ -184,7 +183,7 @@ After each implementation wave, run via lint_fixer.py:
 LINT_JSON=$(lintCommand 2>&1 | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/lint_fixer.py" --format eslint-json)
 TSC_JSON=$(typeCheckCommand 2>&1 | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/implementer/lint_fixer.py" --format tsc)
 ```
-If `clean: true`: no LLM call needed. If errors: pass ONLY the `errors` JSON to Haiku (not full files).
+If `clean: true`: no LLM call needed. If errors: pass ONLY the `errors` JSON to Sonnet (not full files).
 Auto-fix max 3 attempts. After 3: mark `lint-blocked`, skip to next wave.
 
 ### Gate 4: REVIEW
@@ -230,19 +229,19 @@ Leader pre-loads: ticket content, affected files, code rules, test/lint/typechec
 
 **Trivial tickets:**
 ```
-Task(subagent_type: {routed_type}, model: "haiku",
+Task(subagent_type: {routed_type}, model: "sonnet",
      prompt: Read templates/fast-path-agent.md with placeholders filled)
 ```
 
 **Simple tickets (two-step):**
 ```
-Step 1: Task(model: "haiku", prompt: fast-path-agent.md — Gates 1-3 only)
+Step 1: Task(model: "sonnet", prompt: fast-path-agent.md — Gates 1-3 only)
 Step 2: Task(model: "sonnet", prompt: reviewer-prefix.md — Gate 4 only, receives diff + test results)
 ```
 
 **Escalation**: If fails Gate 3 or Gate 4 twice → complexity="complex", full path next wave, increment `stats.fastPathEscalations`.
 
-Log: `{"ticket_id":"{id}","pipeline":"fast","model":"haiku|haiku+sonnet","cost_usd":X,"escalated_to_full":false}`
+Log: `{"ticket_id":"{id}","pipeline":"fast","model":"sonnet|sonnet+sonnet","cost_usd":X,"escalated_to_full":false}`
 
 ---
 
@@ -268,7 +267,7 @@ SendMessage `shutdown_request` to each teammate. Wait for response. TeamDelete. 
 ═══ WAVE {N} COMPLETE ═══
 Tickets: {completed}/{attempted} | Tests: +{N} | Cost: ${cost}
 Pipeline: fast:{N} full:{N} | Escalations: {N}
-Models: free:{N} haiku:{N} sonnet:{N}
+Models: free:{N} sonnet:{N}
 Remaining: {N} | Session: ${total} | Cache: {rate}%
 Waves: {current}/{max}
 ══════════════════════════

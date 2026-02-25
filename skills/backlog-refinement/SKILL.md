@@ -15,10 +15,10 @@ This skill runs inside a target project that has been initialized with `backlog-
 ## MODEL RULES FOR TASK TOOL
 
 ```
-model: "haiku"   → write-agents: sub-ticket file creation during auto-split (receives pre-digested context map)
-model: "haiku"   → analysis agents: code verification, duplicate detection
+model: "sonnet"  → write-agents: sub-ticket file creation during auto-split (receives pre-digested context map)
+model: "sonnet"  → analysis agents: code verification, duplicate detection
 model: "sonnet"  → write-agents: health report generation only (complex multi-section doc)
-NOTE: split ticket write-agents use Haiku; report write-agent stays Sonnet (complexity).
+NOTE: all write-agents use Sonnet.
 NEVER omit model: — parent may be Opus/Sonnet; always set explicitly.
 ```
 
@@ -103,7 +103,7 @@ For each `SCOPE_SPLIT` ticket:
    status: split
    split_into: [FEAT-007a, FEAT-007b]
    ```
-4. Write new sub-ticket files using Haiku write-agent
+4. Write new sub-ticket files using Sonnet write-agent
 5. Each sub-ticket gets `estimated_tokens` and `scope_boundary` populated
 
 After split, the sub-tickets enter Phase 1 as normal.
@@ -318,7 +318,6 @@ Split: ~60% input, ~40% output.
 |-------|-----------|------------|
 | Claude Opus 4 | $5.50 | $27.50 |
 | Claude Sonnet 4 | $3.30 | $16.50 |
-| Claude Haiku 3.5 | $1.10 | $5.50 |
 
 ```
 cost = (input_tokens / 1_000_000 * input_price) + (output_tokens / 1_000_000 * output_price)
@@ -335,7 +334,6 @@ Insert after `## Dependencies`:
 |-------|-------------|---------------|-----------|
 | Opus 4 | ~{input} | ~{output} | ${cost} |
 | Sonnet 4 | ~{input} | ~{output} | ${cost} |
-| Haiku 3.5 | ~{input} | ~{output} | ${cost} |
 
 **Basis**: {N} files to modify, {M} files to create, {K} tests defined
 **Estimation source**: {historical (N samples) | default heuristics}
@@ -376,7 +374,7 @@ For each ticket:
 7. EXECUTE  - Apply the decided action (see Phase 4)
 ```
 
-For codebase scanning on large projects, use the **Task** tool to delegate file verification to a subagent with `model: "haiku"`.
+For codebase scanning on large projects, use the **Task** tool to delegate file verification to a subagent with `model: "sonnet"`.
 
 ---
 
@@ -609,7 +607,7 @@ If MCP memory tools are not available, skip this step without error.
 - ALWAYS move obsolete tickets to completed/ (never delete without moving)
 - NEVER delete tickets without moving them to completed/ first
 - NEVER change the essence of the issue -- only improve clarity, accuracy, and completeness
-- ALWAYS pass model: "haiku" to analysis subagents, model: "sonnet" to write-agents
+- ALWAYS pass model: "sonnet" to analysis subagents and write-agents
 
 ---
 

@@ -123,7 +123,7 @@ def run_wave_end(
                 review_rounds=ticket.get("review_rounds", 1),
                 tests_added=ticket.get("tests_added", 0),
                 cost_usd=ticket.get("cost_usd", 0.0),
-                model=ticket.get("model", "haiku"),
+                model=ticket.get("model", "sonnet"),
             )
             enriched_count += 1
             enriched_ids.append(ticket_id)

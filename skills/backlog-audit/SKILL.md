@@ -1,19 +1,19 @@
 ---
 name: backlog-audit
-description: "Full project health audit: 12-check deterministic prescan ($0) + cascading Haiku→Sonnet→Opus funnel + RAG dedup + batch ticket creation. 15-call budget. v2.0."
+description: "Full project health audit: 12-check deterministic prescan ($0) + cascading Sonnet sweep→Sonnet deep→Opus funnel + RAG dedup + batch ticket creation. 15-call budget. v2.0."
 allowed-tools: Read, Glob, Grep, Bash, Write, Edit, Task, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, TaskUpdate, TaskGet
 ---
 
 # Backlog Audit v2.0
 
-Full project health audit. Cascading Haiku→Sonnet→Opus funnel: deterministic prescan, Haiku full sweep, Sonnet deep analysis on suspects, Opus critical review on escalations, and batch ticket creation. 15-call budget. Runs once and exits.
+Full project health audit. Cascading Sonnet sweep→Sonnet deep→Opus funnel: deterministic prescan, Sonnet full sweep, Sonnet deep analysis on suspects, Opus critical review on escalations, and batch ticket creation. 15-call budget. Runs once and exits.
 
 ## MODEL RULES FOR TASK TOOL
 
 ```
-model: "haiku"   → Phase 1: full file sweep (max 4 batched agents)
+model: "sonnet"  → Phase 1: full file sweep (max 4 batched agents)
                    Phase 4: ticket creation (1-2 batched agents)
-model: "sonnet"  → Phase 2: deep analysis on Haiku suspects (1-3 batched agents)
+model: "sonnet"  → Phase 2: deep analysis on Phase 1 suspects (1-3 batched agents)
 model: "opus"    → Phase 3: critical review on Sonnet escalations (0-1 agent)
 
 CALL BUDGET: 15 max.
@@ -25,7 +25,7 @@ NEVER spawn one agent per finding. ALWAYS batch.
 ```
 - Never create ticket content inline in your response
 - Max response length: ~30 lines
-- Phase 4 ticket creation → parallel haiku write-agents (max 2 at once)
+- Phase 4 ticket creation → parallel sonnet write-agents (max 2 at once)
 ```
 
 ## WRITE-AGENT CHUNKING RULE
@@ -81,30 +81,30 @@ PHASE 0.5: RAG CONTEXT PREP ($0)
     past_findings = Query RAG: {"query": "audit findings", "n_results": 10}
   IF RAG unreachable: skip silently, continue without RAG context
 
-PHASE 1: HAIKU FULL SWEEP (~$0.50, max 4 agents)
+PHASE 1: SONNET FULL SWEEP (~$0.50, max 4 agents)
   project_files = Glob all source files (exclude node_modules, .git, dist, build)
   Group files into mega-chunks (~750 files per chunk, max 4 chunks)
   TeamCreate("audit-{date}")
 
   FOR each chunk (parallel, max 4 at once):
     Task(
-      model: "haiku",
+      model: "sonnet",
       subagent_type: "general-purpose",
       team_name: "audit-{date}",
       name: "sweep-{chunk_index}",
-      prompt: <Haiku Sweep Template filled with:
+      prompt: <Sonnet Sweep Template filled with:
         chunk.files, prescan_findings for those files,
         config.audit.dimensions, architecture_rules>
     )
 
   Wait for all agents, collect findings
-  haiku_findings = parse JSON from each agent
+  sweep_findings = parse JSON from each agent
 
   Classify findings:
-    high_confidence = [f for f in haiku_findings
+    high_confidence = [f for f in sweep_findings
       if f.confidence >= 0.8 AND f.severity in ["low","medium"] AND NOT f.suspect]
       → these go DIRECT to Phase 4 tickets
-    suspect_findings = [f for f in haiku_findings if f.suspect]
+    suspect_findings = [f for f in sweep_findings if f.suspect]
       → these pass to Sonnet in Phase 2
 
   Print: "Phase 1 complete: {N} findings ({M} high-confidence, {K} suspects for Sonnet)"
@@ -125,7 +125,7 @@ PHASE 2: SONNET DEEP ANALYSIS (~$0.30-0.80, 1-3 agents)
     )
 
   Sonnet does TWO things per batch:
-    1. Validates or rejects each Haiku suspect
+    1. Validates or rejects each Phase 1 suspect
     2. Discovers NEW issues on suspect files (cross-file, architectural, subtle logic)
 
   Output per finding:
@@ -166,7 +166,7 @@ PHASE 3.5: RAG DEDUPLICATION ($0)
       IF similarity 0.60-0.85 → add "related_to" field
   Print: "Phase 3.5: {N} duplicates skipped"
 
-PHASE 4: HAIKU TICKET CREATION + SUMMARY (~$0.30, 1-2 agents)
+PHASE 4: SONNET TICKET CREATION + SUMMARY (~$0.30, 1-2 agents)
   all_findings = prescan_findings + high_confidence + validated_findings
   Remove findings marked duplicate_skipped
   SEQ = 1
@@ -176,19 +176,19 @@ PHASE 4: HAIKU TICKET CREATION + SUMMARY (~$0.30, 1-2 agents)
     ticket_id = "AUDIT-{ticket_prefix}-{date}-{SEQ:03d}"
     SEQ += 1
 
-  Batch ALL findings into 1-2 Haiku write-agents (up to 8 tickets per agent):
+  Batch ALL findings into 1-2 Sonnet write-agents (up to 8 tickets per agent):
     FOR each batch:
       Task(
-        model: "haiku",
+        model: "sonnet",
         subagent_type: "general-purpose",
         team_name: "audit-{date}",
         name: "tickets-{batch_index}",
-        prompt: <Haiku Ticket Writer Template filled with batch of findings>
+        prompt: <Sonnet Ticket Writer Template filled with batch of findings>
       )
 
   Append to .backlog-ops/usage-ledger.jsonl:
   {"skill":"audit","date":"{date}","tickets_created":N,
-   "phases":{"prescan":N,"haiku":N,"sonnet":N,"opus":N},
+   "phases":{"prescan":N,"sonnet_sweep":N,"sonnet_deep":N,"opus":N},
    "duplicates_skipped":N}
 
   Print summary:
@@ -198,7 +198,7 @@ PHASE 4: HAIKU TICKET CREATION + SUMMARY (~$0.30, 1-2 agents)
     Scanned: {N} files | 12 deterministic checks
     Findings by phase:
       Phase 0 (prescan):  {N} ($0.00)
-      Phase 1 (Haiku):    {N}
+      Phase 1 (Sonnet):    {N}
       Phase 2 (Sonnet):   {N}
       Phase 3 (Opus):     {N}
     Duplicates skipped: {N}
@@ -214,7 +214,7 @@ PHASE 4: HAIKU TICKET CREATION + SUMMARY (~$0.30, 1-2 agents)
 
 ## Prompt Templates
 
-### Haiku Sweep Template
+### Sonnet Sweep Template
 
 Fill placeholders before spawning each sweep agent:
 
@@ -257,9 +257,9 @@ If no findings: return [].
 ### Sonnet Deep Template
 
 ```
-You are a deep analysis agent. Validate Haiku suspects AND discover new issues.
+You are a deep analysis agent. Validate Phase 1 suspects AND discover new issues.
 
-SUSPECT FINDINGS FROM HAIKU: {batch of suspect findings as JSON array}
+SUSPECT FINDINGS FROM PHASE 1: {batch of suspect findings as JSON array}
 ARCHITECTURE RULES: {architecture_rules or "None"}
 RAG CONTEXT: {rag_context or "None"}
 
@@ -273,7 +273,7 @@ For EACH suspect finding:
 ALSO: Do your own deeper analysis on the suspect files:
 - Cross-file dependency issues
 - Architectural violations
-- Subtle logic bugs Haiku might miss
+- Subtle logic bugs Phase 1 sweep might miss
 - Include any NEW findings you discover
 
 Output ONLY JSON:
@@ -321,7 +321,7 @@ Output ONLY JSON array:
   "adjusted_severity":"critical|high|medium|low","notes":"..."}]
 ```
 
-### Haiku Ticket Writer Template
+### Sonnet Ticket Writer Template
 
 ```
 You are a ticket write-agent. Create backlog ticket files using Write tool.
@@ -368,7 +368,7 @@ After writing ALL tickets, return ONLY:
 | `backlog.config.json` not found | Stop: "Run /backlog-toolkit:init first" |
 | `audit.enabled: false` | Exit silently with message |
 | RAG server unreachable | Skip RAG steps, continue without context |
-| Haiku agent timeout (>3 min) | Log warning, continue with findings from other agents |
+| Agent sweep timeout (>3 min) | Log warning, continue with findings from other agents |
 | Sonnet validation timeout (>5 min) | Log warning, mark finding as unvalidated, skip |
 | Opus review timeout (>5 min) | Log warning, keep Sonnet validation as final |
 | Ticket creation fails | Log error for that finding, continue with next |
@@ -381,8 +381,8 @@ After writing ALL tickets, return ONLY:
 1. Read `backlog.config.json` — verify `audit.enabled`
 2. Run deterministic prescan (12 checks) -- Phase 0
 3. RAG context prep -- Phase 0.5
-4. Haiku full sweep (4 mega-chunk agents) -- Phase 1
+4. Sonnet full sweep (4 mega-chunk agents) -- Phase 1
 5. Sonnet deep analysis (1-3 agents, suspects only) -- Phase 2
 6. Opus critical review (0-1 agent, escalated only) -- Phase 3
 7. RAG deduplication -- Phase 3.5
-8. Haiku ticket creation + print summary -- Phase 4
+8. Sonnet ticket creation + print summary -- Phase 4

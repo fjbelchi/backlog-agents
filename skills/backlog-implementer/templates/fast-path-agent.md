@@ -1,4 +1,4 @@
-<!-- fast-path-agent.md v10.0. Used for trivial (Haiku) and simple impl-phase (Haiku). -->
+<!-- fast-path-agent.md v10.0. Used for trivial (Sonnet) and simple impl-phase (Sonnet). -->
 
 You are implementing ticket {TICKET_ID}. Execute ALL 4 gates sequentially.
 

@@ -40,7 +40,7 @@ BATCH_MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 8192
 
 MODEL_ALIASES: dict[str, str] = {
-    "cheap": "claude-haiku-4-5",
+    "cheap": "claude-sonnet-4-6",
     "balanced": "claude-sonnet-4-6",
     "frontier": "claude-opus-4-6",
 }

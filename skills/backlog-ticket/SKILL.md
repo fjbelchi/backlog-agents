@@ -1,6 +1,6 @@
 ---
 name: backlog-ticket
-description: "Generate high-quality backlog tickets with 7-check validation, scope gate (max 5 files, 100k tokens), auto-split, and Haiku write-agent. Detects gaps, verifies dependencies, validates contracts, analyzes impact, ensures consistency, and estimates implementation cost per model. Learns from actual costs via cost-history feedback loop."
+description: "Generate high-quality backlog tickets with 7-check validation, scope gate (max 5 files, 100k tokens), auto-split, and Sonnet write-agent. Detects gaps, verifies dependencies, validates contracts, analyzes impact, ensures consistency, and estimates implementation cost per model. Learns from actual costs via cost-history feedback loop."
 allowed-tools: Read, Write, Bash, Glob, Grep, Edit, AskUserQuestion, Task
 ---
 
@@ -15,9 +15,8 @@ This skill runs inside a target project that has been initialized with `backlog-
 ## MODEL RULES FOR TASK TOOL
 
 ```
-model: "haiku"   → write-agents: ticket file creation (receives pre-digested context map)
-model: "haiku"   → analysis agents: codebase scanning, gap detection, duplicate check
-NOTE: write-agent is now Haiku (not Sonnet) because parent pre-digests all context.
+model: "sonnet"  → write-agents: ticket file creation (receives pre-digested context map)
+model: "sonnet"  → analysis agents: codebase scanning, gap detection, duplicate check
 NEVER omit model: — parent may be Opus/Sonnet; always set explicitly.
 ```
 
@@ -27,7 +26,7 @@ NEVER omit model: — parent may be Opus/Sonnet; always set explicitly.
 - Never output ticket content inline in your response
 - Max response length: ~30 lines
 - Use Write tool for files < 50 lines
-- Use haiku write-agent (Task tool, model: "haiku") for ticket files (always > 50 lines)
+- Use sonnet write-agent (Task tool, model: "sonnet") for ticket files (always > 50 lines)
 ```
 
 ## WRITE-AGENT CHUNKING RULE
@@ -229,7 +228,7 @@ For large projects, use the **Task** tool to delegate codebase scanning to a sub
 
 ### 1.6 Build Context Map
 
-After completing 1.1–1.5, assemble a context map. This is the **only input** the Haiku write-agent will receive — it must contain everything needed to write the ticket without tool calls.
+After completing 1.1–1.5, assemble a context map. This is the **only input** the Sonnet write-agent will receive — it must contain everything needed to write the ticket without tool calls.
 
 ```
 <context_map>
@@ -415,7 +414,6 @@ Use current pricing (per 1M tokens):
 |-------|-----------|------------|
 | Claude Opus 4 | $5.50 | $27.50 |
 | Claude Sonnet 4 | $3.30 | $16.50 |
-| Claude Haiku 3.5 | $1.10 | $5.50 |
 
 ```
 cost = (input_tokens / 1_000_000 * input_price) + (output_tokens / 1_000_000 * output_price)
@@ -450,7 +448,6 @@ Add this section to the generated ticket after Dependencies:
 |-------|-------------|---------------|-----------|
 | Opus 4 | ~{input} | ~{output} | ${cost} |
 | Sonnet 4 | ~{input} | ~{output} | ${cost} |
-| Haiku 3.5 | ~{input} | ~{output} | ${cost} |
 
 **Basis**: {N} files to modify, {M} files to create, {K} tests defined
 **Estimation source**: {historical (N samples) | default heuristics}
@@ -621,12 +618,12 @@ IF any check fails → trigger auto-split (Phase 0.6) and regenerate
 
 ### All 7 Checks Pass
 
-Spawn a haiku write-agent to generate and write the ticket file:
+Spawn a sonnet write-agent to generate and write the ticket file:
 
 ```
 Task(
   subagent_type: "general-purpose",
-  model: "haiku",
+  model: "sonnet",
   prompt: """
 You are a write-agent. Your ONLY job is to create a ticket file using the Write tool.
 Do NOT use any other tools. Do NOT explore the codebase. Do NOT output file content inline.
@@ -656,7 +653,7 @@ After writing, return ONLY this JSON:
 Receive the JSON response, then print:
 
 ```
-✓ {PREFIX}-{NNN} created ({lines} lines) — ~${opus_cost} Opus | ~${sonnet_cost} Sonnet | ~${haiku_cost} Haiku
+✓ {PREFIX}-{NNN} created ({lines} lines) — ~${opus_cost} Opus | ~${sonnet_cost} Sonnet
   File: {dataDir}/pending/{filename}
 ```
 
@@ -679,7 +676,7 @@ Ticket created: {PREFIX}-{NNN}
   Dependencies: {count} tickets
   Tests:        {unit_count} unit, {integration_count} integration
   AC count:     {count}
-  Est. cost:    ~${opus_cost} (Opus) | ~${sonnet_cost} (Sonnet) | ~${haiku_cost} (Haiku)
+  Est. cost:    ~${opus_cost} (Opus) | ~${sonnet_cost} (Sonnet)
 ```
 
 ### Warnings Found

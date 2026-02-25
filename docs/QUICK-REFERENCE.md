@@ -48,7 +48,7 @@ grep -i error ~/.backlog-toolkit/services/logs/litellm.log | tail -20
 
 ## LiteLLM Models
 
-- `cheap` - Claude 3.5 Haiku (fast, cheap)
+- `cheap` - Claude Sonnet 4.6 (same as balanced)
 - `balanced` - Claude 3.5 Sonnet (balanced)
 - `frontier` - Claude 3 Opus (powerful)
 
